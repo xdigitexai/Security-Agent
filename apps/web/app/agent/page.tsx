@@ -10,9 +10,10 @@ export default async function Page(){
     orderBy:{createdAt:'desc'}
   });
   const single=assets.length===1?assets[0]:null;
+  const sampleHost=assets[0]?.normalizedHost||'example.com';
   const defaultPrompt=single
     ? 'Perform a complete security assessment. Map the application, prioritize the highest-risk first-party surfaces, safely verify weaknesses, and prepare a remediation-focused report.'
-    : 'Assess app.example.com comprehensively. Map the application, prioritize the highest-risk first-party surfaces, safely verify weaknesses, and prepare a remediation-focused report.';
+    : `Assess ${sampleHost} comprehensively. Map the application, prioritize the highest-risk first-party surfaces, safely verify weaknesses, and prepare a remediation-focused report.`;
 
   return <div className="stack">
     <div>
@@ -38,9 +39,9 @@ export default async function Page(){
 
     <div className="card stack">
       <h2>Prompt examples</h2>
-      <div className="muted">Full: “Perform a comprehensive end-to-end assessment of example.com and give me the highest-risk confirmed issues first.”</div>
-      <div className="muted">Focused: “Assess example.com with emphasis on authentication, authorization, APIs and sensitive data exposure.”</div>
-      <div className="muted">Remediation: “Scan example.com, safely verify weaknesses, and make the final report developer-focused with clear fix priorities.”</div>
+      <div className="muted">Full: “Perform a comprehensive end-to-end assessment of {sampleHost} and give me the highest-risk confirmed issues first.”</div>
+      <div className="muted">Focused: “Assess {sampleHost} with emphasis on authentication, authorization, APIs and sensitive data exposure.”</div>
+      <div className="muted">Remediation: “Scan {sampleHost}, safely verify weaknesses, and make the final report developer-focused with clear fix priorities.”</div>
     </div>
 
     <div className="card">
