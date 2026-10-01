@@ -62,3 +62,24 @@ export interface ApplicationMap {
   apiDocsUrls: string[];
   websocketUrls: string[];
 }
+
+export interface AuthorizedTestIdentity {
+  id:string;
+  label:string;
+  roleLabel:string;
+  tenantLabel?:string|null;
+  authType:'BEARER'|'COOKIE'|'HEADERS';
+  credentialRef:string;
+  expectedSessionState:'ACTIVE'|'REVOKED';
+}
+
+export interface AuthorizedTestResource {
+  id:string;
+  label:string;
+  url:string;
+  method:'GET'|'HEAD';
+  ownerIdentityId:string;
+  comparatorIdentityIds:string[];
+  expectation:'DENY_COMPARATORS'|'PUBLIC';
+  proofMarker?:string|null;
+}
