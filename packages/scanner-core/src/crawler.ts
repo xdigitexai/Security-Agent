@@ -29,12 +29,12 @@ export async function crawl(startUrl:string, scope:ScanScope, isCanceled:()=>Pro
       await page.route('**/*',async route=>{try{const u=new URL(route.request().url());if(!hostAllowed(u.hostname,scope)){external.add(u.origin);return route.abort();}await validateScopedUrl(u,scope);return route.continue();}catch{return route.abort();}});
       try{
         const response=await page.goto(safe.toString(),{waitUntil:'domcontentloaded',timeout:15000});const status=response?.status()||0;const responseHeaders=response?await response.allHeaders():{};const contentType=(responseHeaders['content-type']||'').toLowerCase();const pathname=safe.pathname.toLowerCase();
-        if(!status||status===404||status===410)continue;pages.add(safe.toString());
+        if(!status||status===404||status===410)continue;
         if((pathname.endsWith('/robots.txt')||pathname==='/robots.txt')&&status>=200&&status<300){const text=await page.locator('body').innerText().catch(()=> '');for(const line of text.split(/\r?\n/)){const sitemap=line.match(/^\s*Sitemap\s*:\s*(.+)$/i)?.[1];if(sitemap)enqueue(sitemap,safe.toString(),0,'discovery');const path=line.match(/^\s*(?:Allow|Disallow)\s*:\s*(\/[^\s#]*)/i)?.[1];if(path&&!/[*$]/.test(path))enqueue(path,safe.toString(),1,'discovery');}continue;}
         if((/(?:sitemap|xml)/i.test(pathname)||contentType.includes('xml'))&&status>=200&&status<300){const xml=await page.content().catch(()=> '');for(const match of xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi))enqueue(match[1]!,safe.toString(),1,'discovery');continue;}
-        if(!contentType.includes('html')&&!contentType.includes('xhtml'))continue;
+        if(!contentType.includes('html')&&!contentType.includes('xhtml'))continue;pages.add(safe.toString());
         const data=await page.evaluate(()=>({links:[...document.querySelectorAll('a[href],link[href]')].map(a=>(a as HTMLAnchorElement).href),scripts:[...document.scripts].map(s=>s.src).filter(Boolean),inline:[...document.scripts].map(s=>s.src?'':s.textContent||'').join('\n').slice(0,300000),forms:[...document.querySelectorAll('form')].map(f=>({action:(f as HTMLFormElement).action,method:(f as HTMLFormElement).method||'GET',names:[...f.querySelectorAll('input,select,textarea,button')].map(i=>(i as HTMLInputElement).name).filter(Boolean)}))}));
-        for(const s of data.scripts){scripts.add(s);enqueue(s,safe.toString(),depth+1,'script');}
+        for(const s of data.scripts){scripts.add(s);try{const u=new URL(s,safe.toString());if(hostAllowed(u.hostname,scope))setEndpoint('GET',u);else external.add(u.origin);}catch{}}
         for(const f of data.forms){try{const u=new URL(f.action||safe.toString());if(hostAllowed(u.hostname,scope))setEndpoint(f.method.toUpperCase(),u,{parameters:[...new Set(f.names)].slice(0,40)});}catch{}}
         for(const href of data.links)enqueue(href,safe.toString(),depth+1,'link');for(const candidate of scriptCandidates(data.inline))enqueue(candidate,safe.toString(),depth+1,'script');
       }finally{await page.close();}
