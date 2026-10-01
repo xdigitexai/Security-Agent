@@ -6,6 +6,7 @@ import { ScanHttpClient, crawl, runChecks, buildApplicationMap, type ScanContext
 import { checks } from '@xdigitex/security-checks';
 import type { ScanScope, SecurityFinding, AuthorizedTestIdentity, AuthorizedTestResource } from '@xdigitex/types';
 import { resolveRequestProfile } from './profile-broker';
+import { buildAgentPlan } from './deepseek-plan';
 
 const cfg=env();
 const redis=new IORedis(cfg.REDIS_URL,{maxRetriesPerRequest:null});
@@ -27,8 +28,8 @@ const worker=new Worker('security-scans',async job=>{
  const retestFindingId=typeof job.data?.retestFindingId==='string'?job.data.retestFindingId:undefined;
  const retestFinding=retestFindingId?await db.finding.findFirst({where:{id:retestFindingId,assetId:scan.assetId,organizationId:scan.organizationId}}):null;
  if(retestFindingId&&!retestFinding)throw new Error('RETEST_FINDING_NOT_FOUND');
- const selectedChecks=retestFinding?checks.filter(c=>c.id===retestFinding.checkId):checks;
- if(retestFinding&&selectedChecks.length===0)throw new Error(`RETEST_CHECK_UNAVAILABLE:${retestFinding.checkId}`);
+ const retestChecks=retestFinding?checks.filter(c=>c.id===retestFinding.checkId):[];
+ if(retestFinding&&retestChecks.length===0)throw new Error(`RETEST_CHECK_UNAVAILABLE:${retestFinding.checkId}`);
  const scope=scan.scope as unknown as ScanScope;const http=new ScanHttpClient(scope);const started=new Date();
  await db.scan.update({where:{id:scan.id},data:{status:ScanStatus.RUNNING,stage:'Validation',progress:2,startedAt:started}});
  await db.scanJob.updateMany({where:{scanId:scan.id},data:{status:JobStatus.RUNNING,startedAt:started,attempt:{increment:1}}});
@@ -40,12 +41,7 @@ const worker=new Worker('security-scans',async job=>{
    const testIdentities:AuthorizedTestIdentity[]=identityRows.map(i=>({id:i.id,label:i.label,roleLabel:i.roleLabel,tenantLabel:i.tenantLabel,authType:i.authType,credentialRef:i.credentialRef,expectedSessionState:i.expectedSessionState}));
    const testResources:AuthorizedTestResource[]=resourceRows.filter(r=>r.method==='GET'||r.method==='HEAD').map(r=>({id:r.id,label:r.label,url:r.url,method:r.method as 'GET'|'HEAD',ownerIdentityId:r.ownerIdentityId,comparatorIdentityIds:Array.isArray(r.comparatorIdentityIds)?r.comparatorIdentityIds.filter((x):x is string=>typeof x==='string'):[],expectation:r.expectation,proofMarker:r.proofMarker}));
    const resolvedIdentityHeaders:Record<string,Record<string,string>>={};
-   if(cfg.IDENTITY_PROFILE_BROKER_URL){
-     for(const identity of testIdentities){
-       try{const profile=await resolveRequestProfile(cfg.IDENTITY_PROFILE_BROKER_URL,identity.credentialRef);if(profile)resolvedIdentityHeaders[identity.id]=profile;}
-       catch(error){await log(scan.id,'Authorization Planning','Identity profile could not be resolved',{identityId:identity.id,credentialRef:identity.credentialRef,error:String(error).slice(0,160)});}
-     }
-   }
+   if(cfg.IDENTITY_PROFILE_BROKER_URL){for(const identity of testIdentities){try{const profile=await resolveRequestProfile(cfg.IDENTITY_PROFILE_BROKER_URL,identity.credentialRef);if(profile)resolvedIdentityHeaders[identity.id]=profile;}catch(error){await log(scan.id,'Authorization Planning','Identity profile could not be resolved',{identityId:identity.id,credentialRef:identity.credentialRef,error:String(error).slice(0,160)});}}}
    await log(scan.id,'Authorization Planning','Loaded owner-authorized identity test plan',{identities:testIdentities.map(i=>({id:i.id,label:i.label,role:i.roleLabel,tenant:i.tenantLabel,sessionState:i.expectedSessionState,credentialRef:i.credentialRef,resolved:!!resolvedIdentityHeaders[i.id]})),resources:testResources.map(r=>({id:r.id,label:r.label,url:r.url,method:r.method,expectation:r.expectation,comparators:r.comparatorIdentityIds.length})),activeProfileBroker:!!cfg.IDENTITY_PROFILE_BROKER_URL,resolvedProfiles:Object.keys(resolvedIdentityHeaders).length});
    await db.scan.update({where:{id:scan.id},data:{stage:'Reconnaissance',progress:8}});
    const recon=await http.request(scan.asset.baseUrl);await log(scan.id,'Reconnaissance',`Root responded ${recon.status}`);
@@ -55,21 +51,25 @@ const worker=new Worker('security-scans',async job=>{
    await db.discoveredEndpoint.createMany({data:[...cr.endpoints.map(e=>({scanId:scan.id,url:e.url,method:e.method,parameters:e.parameters??[],responseCode:e.responseCode,contentType:e.contentType,external:false})),...cr.externalDependencies.map(url=>({scanId:scan.id,url,method:'EXTERNAL_DEPENDENCY',external:true}))],skipDuplicates:true});
    const applicationMap=buildApplicationMap({pages:cr.pages,endpoints:cr.endpoints,scripts:cr.scripts,externalDependencies:cr.externalDependencies,rootHeaders:recon.headers,rootBody:recon.body});
    await log(scan.id,'Endpoint Discovery','Application map built',{surfaces:applicationMap.surfaces.length,auth:applicationMap.authUrls.length,api:applicationMap.apiUrls.length,admin:applicationMap.adminUrls.length,uploads:applicationMap.uploadUrls.length,payments:applicationMap.paymentUrls.length,graphql:applicationMap.graphqlUrls.length,apiDocs:applicationMap.apiDocsUrls.length,websockets:applicationMap.websocketUrls.length,technologies:applicationMap.technologies,externalDependencies:applicationMap.externalDependencies});
+   let selectedChecks=retestFinding?retestChecks:checks;
+   if(!retestFinding){
+     await db.scan.update({where:{id:scan.id},data:{stage:'AI Planning',progress:30}});
+     const plan=await buildAgentPlan(scan.agentPrompt||undefined,applicationMap,checks);
+     if(plan){
+       const wanted=new Set(plan.focusCheckIds);selectedChecks=checks.filter(c=>wanted.has(c.id));
+       await db.scan.update({where:{id:scan.id},data:{agentPlan:plan as any}});
+       await log(scan.id,'AI Planning','DeepSeek prioritized registered scanner modules',{model:cfg.DEEPSEEK_MODEL,checks:selectedChecks.map(c=>c.id),rationale:plan.rationale,priorities:plan.priorities});
+     }else await log(scan.id,'AI Planning','DeepSeek unavailable; using complete registered safe check set',{checks:checks.map(c=>c.id)});
+   }
    const ctx:ScanContext={assetUrl:scan.asset.baseUrl,scope,http,pages:cr.pages,endpoints:cr.endpoints,scripts:cr.scripts,applicationMap,testIdentities,testResources,resolvedIdentityHeaders,isCanceled};
    const stages=['Header Analysis','API Analysis','Authentication Analysis','Client-Side Analysis','Safe Vulnerability Checks'];
    const findings=await runChecks(ctx,selectedChecks,async(check,i)=>{const stage=retestFinding?'Focused Retest':stages[Math.min(i,stages.length-1)]!;await db.scan.update({where:{id:scan.id},data:{stage,progress:35+Math.floor((i/Math.max(selectedChecks.length,1))*50)}});await log(scan.id,stage,`Running ${check.name}`,retestFinding?{checkId:check.id,findingId:retestFinding.id}:undefined);});
    const saved=[];for(const f of findings)saved.push(await saveFinding(scan,f));
    const current=new Set(saved.map(x=>x.fingerprint));
-   if(retestFinding){
-     const reproduced=current.has(retestFinding.fingerprint);
-     if(reproduced){await db.finding.update({where:{id:retestFinding.id},data:{status:FindingStatus.OPEN,lastSeenAt:new Date()}});await db.findingEvent.create({data:{findingId:retestFinding.id,type:'RETEST_STILL_VULNERABLE',message:`Focused retest ${scan.id} reproduced the original finding.`}});}
-     else{await db.finding.update({where:{id:retestFinding.id},data:{status:FindingStatus.FIXED}});await db.findingEvent.create({data:{findingId:retestFinding.id,type:findings.length?'RETEST_CHANGED_BEHAVIOR':'RETEST_FIXED',message:findings.length?`Original fingerprint was not reproduced by focused retest ${scan.id}; related changed behavior was recorded separately.`:`Focused retest ${scan.id} did not reproduce the original behavior.`}});}
-   }else{
-     const prior=await db.finding.findMany({where:{assetId:scan.assetId,status:FindingStatus.OPEN,NOT:{scanId:scan.id}}});
-     for(const f of prior)if(!current.has(f.fingerprint)){await db.finding.update({where:{id:f.id},data:{status:FindingStatus.FIXED}});await db.findingEvent.create({data:{findingId:f.id,type:'NOT_REPRODUCED',message:`Not reproduced by scan ${scan.id}; historical evidence retained.`}});}
-   }
+   if(retestFinding){const reproduced=current.has(retestFinding.fingerprint);if(reproduced){await db.finding.update({where:{id:retestFinding.id},data:{status:FindingStatus.OPEN,lastSeenAt:new Date()}});await db.findingEvent.create({data:{findingId:retestFinding.id,type:'RETEST_STILL_VULNERABLE',message:`Focused retest ${scan.id} reproduced the original finding.`}});}else{await db.finding.update({where:{id:retestFinding.id},data:{status:FindingStatus.FIXED}});await db.findingEvent.create({data:{findingId:retestFinding.id,type:findings.length?'RETEST_CHANGED_BEHAVIOR':'RETEST_FIXED',message:findings.length?`Original fingerprint was not reproduced by focused retest ${scan.id}; related changed behavior was recorded separately.`:`Focused retest ${scan.id} did not reproduce the original behavior.`}});}}
+   else{const prior=await db.finding.findMany({where:{assetId:scan.assetId,status:FindingStatus.OPEN,NOT:{scanId:scan.id}}});for(const f of prior)if(!current.has(f.fingerprint)){await db.finding.update({where:{id:f.id},data:{status:FindingStatus.FIXED}});await db.findingEvent.create({data:{findingId:f.id,type:'NOT_REPRODUCED',message:`Not reproduced by scan ${scan.id}; historical evidence retained.`}});}}
    await db.scan.update({where:{id:scan.id},data:{status:ScanStatus.COMPLETED,stage:'Report Generation',progress:100,completedAt:new Date()}});await db.scanJob.updateMany({where:{scanId:scan.id},data:{status:JobStatus.COMPLETED,completedAt:new Date()}});
-   await log(scan.id,'Report Generation',retestFinding?`Focused retest completed with ${findings.length} matching/related observations`:`Completed with ${findings.length} findings`,{requests:http.count,pages:cr.pages.length,surfaces:applicationMap.surfaces.length,retestFindingId,authorizedIdentityPlans:testResources.length,resolvedIdentityProfiles:Object.keys(resolvedIdentityHeaders).length});return {findings:findings.length,retestFindingId};
+   await log(scan.id,'Report Generation',retestFinding?`Focused retest completed with ${findings.length} matching/related observations`:`Completed with ${findings.length} findings`,{requests:http.count,pages:cr.pages.length,surfaces:applicationMap.surfaces.length,retestFindingId,authorizedIdentityPlans:testResources.length,resolvedIdentityProfiles:Object.keys(resolvedIdentityHeaders).length,selectedChecks:selectedChecks.map(c=>c.id)});return {findings:findings.length,retestFindingId};
  }catch(e){const cancel=String(e).includes('SCAN_CANCELED')||await canceled(scan.id)||Date.now()>deadline;await db.scan.update({where:{id:scan.id},data:{status:cancel?ScanStatus.CANCELED:ScanStatus.FAILED,stage:cancel?'Canceled':'Failed',completedAt:new Date()}});await db.scanJob.updateMany({where:{scanId:scan.id},data:{status:cancel?JobStatus.CANCELED:JobStatus.FAILED,errorMessage:cancel?undefined:String(e),completedAt:new Date()}});if(retestFinding)await db.findingEvent.create({data:{findingId:retestFinding.id,type:'RETEST_FAILED',message:`Focused retest failed safely: ${String(e).slice(0,300)}`}});throw e;}
  finally{await http.close();}
 },{connection:redis,concurrency:cfg.WORKER_CONCURRENCY});
