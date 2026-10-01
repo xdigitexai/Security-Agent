@@ -81,6 +81,9 @@ model Scan {
   stage String @default("Validation")
   progress Int @default(0)
   scope Json
+  agentPrompt String?
+  agentPlan Json?
+  agentReport Json?
   cancelRequestedAt DateTime?
   startedAt DateTime?
   completedAt DateTime?
