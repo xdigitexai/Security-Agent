@@ -23,13 +23,15 @@ export class ScanHttpClient {
       });
     }}});
   }
-  async request(input:string, init:RequestInit={}):Promise<ScanResponse>{
+  async request(input:string, init:RequestInit={}, timeoutMs=15000):Promise<ScanResponse>{
     return this.limiter.schedule(async()=>{
       if(++this.requestCount>Math.min(this.scope.maxRequests,5000)) throw new Error('SCAN_REQUEST_LIMIT');
       let current=await validateScopedUrl(input,this.scope);
       const cfg=env();
       for(let redirects=0;redirects<=5;redirects++){
-        const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),15000);
+        const controller=new AbortController();
+        const boundedTimeout=Math.max(1000,Math.min(timeoutMs,30000));
+        const timer=setTimeout(()=>controller.abort(),boundedTimeout);
         try {
           const res=await fetch(current,{...init,headers:{'user-agent':cfg.SCAN_USER_AGENT,...(init.headers as Record<string,string>|undefined)},redirect:'manual',signal:controller.signal,dispatcher:this.dispatcher});
           const location=res.headers.get('location');
