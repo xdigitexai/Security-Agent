@@ -6,6 +6,7 @@ import { scanQueue } from '../../../../lib/queue';
 import { audit } from '../../../../lib/audit';
 import { env } from '@xdigitex/shared';
 import { enforceRateLimit } from '../../../../lib/rate-limit';
+import { parseOrBadRequest } from '../../../../lib/validate';
 
 const input=z.object({prompt:z.string().trim().min(8).max(6000)});
 
@@ -27,8 +28,9 @@ function promptMentionsHost(prompt:string,host:string){
 export async function POST(req:Request){
   const {user,org}=await requireOrg();
   await enforceRateLimit(`agent-run:${user.id}`,6,60);
-  const form=Object.fromEntries(await req.formData());
-  const {prompt}=input.parse(form);
+  const parsed=parseOrBadRequest(input,Object.fromEntries(await req.formData()));
+  if(!parsed.ok)return parsed.response;
+  const {prompt}=parsed.data;
 
   const assets=await db.asset.findMany({
     where:{organizationId:org.id,verifiedAt:{not:null},scanningEnabled:true},
