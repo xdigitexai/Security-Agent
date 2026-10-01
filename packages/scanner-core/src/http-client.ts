@@ -14,12 +14,17 @@ export class ScanHttpClient {
   constructor(private scope:ScanScope){
     const cfg=env();
     this.limiter=new Bottleneck({maxConcurrent:Math.min(cfg.MAX_CONCURRENT_REQUESTS,5),minTime:Math.ceil(1000/Math.min(scope.maxRequestsPerSecond,cfg.MAX_REQUESTS_PER_SECOND,5))});
-    this.dispatcher=new Agent({connect:{lookup:(hostname,_options,cb)=>{
+    this.dispatcher=new Agent({connect:{lookup:(hostname,options,cb)=>{
       resolvePublic(hostname).then(addresses=>{
-        const first=addresses[0];
-        if(!first)return cb(new Error('DNS_NO_ANSWERS'),undefined as never);
-        cb(null,first,net.isIPv6(first)?6:4);
-      }).catch(error=>cb(error as Error,undefined as never));
+        const requestedFamily=typeof options==='number'?options:Number((options as {family?:number}|undefined)?.family||0);
+        const results=addresses
+          .map(address=>({address,family:net.isIPv6(address)?6:4 as 4|6}))
+          .filter(item=>!requestedFamily||item.family===requestedFamily);
+        if(!results.length)return (cb as any)(new Error('DNS_NO_ANSWERS'));
+        if((options as {all?:boolean}|undefined)?.all)return (cb as any)(null,results);
+        const first=results[0]!;
+        return (cb as any)(null,first.address,first.family);
+      }).catch(error=>(cb as any)(error as Error));
     }}});
   }
   async request(input:string,init:RequestInit={},timeoutMs=15000):Promise<ScanResponse>{
