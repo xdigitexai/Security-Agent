@@ -1,0 +1,3 @@
+ALTER TABLE "Scan" ADD COLUMN "agentPrompt" TEXT;
+ALTER TABLE "Scan" ADD COLUMN "agentPlan" JSONB;
+ALTER TABLE "Scan" ADD COLUMN "agentReport" JSONB;
