@@ -1,0 +1,9 @@
+import type { SecurityCheck } from '@xdigitex/scanner-core';
+import { finding } from './helpers';
+export const headerCheck:SecurityCheck={id:'headers.baseline',name:'Security headers',category:'Security Headers',async run(ctx){
+ const r=await ctx.http.request(ctx.assetUrl); const h=Object.fromEntries(Object.entries(r.headers).map(([k,v])=>[k.toLowerCase(),v])); const out=[];
+ if(!h['content-security-policy']) out.push(finding({checkId:this.id,title:'Content-Security-Policy header missing',description:'The primary HTML response does not declare a CSP.',category:this.category,severity:'LOW',confidence:'CONFIRMED',affectedUrl:r.url,method:'GET',impact:'A CSP can reduce the impact of some client-side injection flaws, but absence alone does not prove exploitability.',remediation:'Deploy a restrictive Content-Security-Policy appropriate to the application and test it before enforcement.',evidence:[r.evidence]}));
+ if(r.url.startsWith('https://')&&!h['strict-transport-security']) out.push(finding({checkId:this.id,title:'HSTS header missing',description:'HTTPS is in use but HSTS is not present.',category:'TLS / Transport',severity:'LOW',confidence:'CONFIRMED',affectedUrl:r.url,method:'GET',impact:'Browsers may be less protected against protocol downgrade on future visits.',remediation:'Add Strict-Transport-Security with a deployment-appropriate max-age after confirming HTTPS coverage.',evidence:[r.evidence]}));
+ if(!h['x-content-type-options']) out.push(finding({checkId:this.id,title:'X-Content-Type-Options header missing',description:'The response does not opt out of MIME sniffing.',category:this.category,severity:'INFORMATIONAL',confidence:'CONFIRMED',affectedUrl:r.url,method:'GET',impact:'Some browsers may infer content types in ways the application did not intend.',remediation:'Set X-Content-Type-Options: nosniff on applicable responses.',evidence:[r.evidence]}));
+ return out;
+}};

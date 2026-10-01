@@ -1,0 +1,10 @@
+import { PrismaClient, MemberRole } from '@prisma/client';
+import argon2 from 'argon2';
+const db = new PrismaClient();
+const email='admin@xdigitex.local';
+const passwordHash=await argon2.hash('ChangeMe-Now-123!');
+const user=await db.user.upsert({where:{email},update:{},create:{email,name:'Xdigitex Admin',passwordHash}});
+const org=await db.organization.create({data:{name:'Xdigitex Security Lab'}}).catch(async()=>db.organization.findFirstOrThrow({where:{name:'Xdigitex Security Lab'}}));
+await db.organizationMember.upsert({where:{organizationId_userId:{organizationId:org.id,userId:user.id}},update:{role:MemberRole.OWNER},create:{organizationId:org.id,userId:user.id,role:MemberRole.OWNER}});
+console.log({email,password:'ChangeMe-Now-123!',organizationId:org.id});
+await db.$disconnect();

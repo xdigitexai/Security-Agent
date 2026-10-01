@@ -1,0 +1,3 @@
+import { cookies, headers } from 'next/headers'; import { randomBytes, timingSafeEqual } from 'node:crypto';
+export async function csrfToken(){const c=await cookies();let v=c.get('xd_csrf')?.value;if(!v){v=randomBytes(24).toString('base64url');c.set('xd_csrf',v,{httpOnly:false,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/'});}return v;}
+export async function assertCsrf(request:Request){const c=(await cookies()).get('xd_csrf')?.value;const h=request.headers.get('x-csrf-token');if(!c||!h||c.length!==h.length||!timingSafeEqual(Buffer.from(c),Buffer.from(h)))throw new Error('CSRF_INVALID');const origin=request.headers.get('origin');const host=(await headers()).get('host');if(origin&&host&&new URL(origin).host!==host)throw new Error('ORIGIN_INVALID');}

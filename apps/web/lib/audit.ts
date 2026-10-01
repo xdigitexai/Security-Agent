@@ -1,0 +1,1 @@
+import { db } from '@xdigitex/database'; export async function audit(organizationId:string,actorUserId:string|undefined,action:string,targetType:string,targetId?:string,metadata?:object){await db.auditLog.create({data:{organizationId,actorUserId,action,targetType,targetId,metadata}});}

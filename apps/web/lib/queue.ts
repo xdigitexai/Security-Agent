@@ -1,0 +1,2 @@
+import { Queue } from 'bullmq'; import IORedis from 'ioredis'; import { env } from '@xdigitex/shared';
+const g=globalThis as unknown as {redis?:IORedis;scanQueue?:Queue}; export const redis=g.redis??new IORedis(env().REDIS_URL,{maxRetriesPerRequest:null}); export const scanQueue=g.scanQueue??new Queue('security-scans',{connection:redis}); if(process.env.NODE_ENV!=='production'){g.redis=redis;g.scanQueue=scanQueue;}

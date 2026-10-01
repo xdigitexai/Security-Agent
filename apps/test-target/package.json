@@ -1,0 +1,1 @@
+{"name":"@xdigitex/test-target","version":"0.1.0","private":true,"type":"module","scripts":{"dev":"tsx watch src/index.ts","build":"tsc -p tsconfig.json","typecheck":"tsc -p tsconfig.json --noEmit"},"dependencies":{"express":"^5.1.0","cookie-parser":"^1.4.7"},"devDependencies":{"@types/express":"^5.0.3","@types/cookie-parser":"^1.4.9"}}

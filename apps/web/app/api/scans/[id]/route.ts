@@ -1,0 +1,2 @@
+import { NextResponse } from 'next/server'; import { requireOrg } from '../../../../lib/auth'; import { db } from '@xdigitex/database';
+export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}){const {org}=await requireOrg();const {id}=await params;const s=await db.scan.findFirst({where:{id,organizationId:org.id},include:{_count:{select:{endpoints:true,findings:true}},findings:{orderBy:{createdAt:'desc'},take:30},logs:{orderBy:{createdAt:'desc'},take:50}}});return s?NextResponse.json(s):new NextResponse('Not found',{status:404});}

@@ -1,0 +1,2 @@
+import { headerCheck } from './headers'; import { cookieCheck } from './cookies'; import { secretCheck } from './secrets'; import { corsCheck } from './cors'; import { clientCheck } from './client'; import { reflectionCheck } from './reflection'; import { redirectCheck } from './redirect';
+export const checks=[headerCheck,cookieCheck,secretCheck,corsCheck,clientCheck,reflectionCheck,redirectCheck];

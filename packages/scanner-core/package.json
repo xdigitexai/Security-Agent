@@ -1,0 +1,4 @@
+{
+ "name":"@xdigitex/scanner-core","version":"0.1.0","type":"module","main":"src/index.ts","types":"src/index.ts",
+ "dependencies":{"@xdigitex/shared":"*","@xdigitex/types":"*","bottleneck":"^2.19.5","undici":"^7.16.0","playwright":"^1.55.1"}
+}

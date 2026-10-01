@@ -1,0 +1,23 @@
+{
+  "name": "xdigitex-security-agent",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "concurrently -n web,worker,target -c auto \"npm:dev -w @xdigitex/web\" \"npm:dev -w @xdigitex/worker\" \"npm:dev -w @xdigitex/test-target\"",
+    "build": "npm run build -ws --if-present",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "lint": "npm run lint -ws --if-present",
+    "test": "vitest run",
+    "db:generate": "npm run prisma:generate -w @xdigitex/database",
+    "db:migrate": "npm run prisma:migrate -w @xdigitex/database",
+    "db:seed": "npm run prisma:seed -w @xdigitex/database"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

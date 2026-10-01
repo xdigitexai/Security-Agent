@@ -1,0 +1,191 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+enum MemberRole { OWNER ADMIN MEMBER VIEWER }
+enum VerificationMethod { DNS_TXT FILE META }
+enum VerificationStatus { PENDING VERIFIED FAILED EXPIRED }
+enum ScanStatus { QUEUED RUNNING COMPLETED FAILED CANCELED }
+enum JobStatus { QUEUED RUNNING COMPLETED FAILED CANCELED }
+enum FindingStatus { OPEN FIXED IGNORED FALSE_POSITIVE RETESTING }
+enum Severity { CRITICAL HIGH MEDIUM LOW INFORMATIONAL }
+enum Confidence { CONFIRMED HIGH MEDIUM LOW NEEDS_REVIEW }
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique
+  passwordHash String
+  name String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  memberships OrganizationMember[]
+  auditLogs AuditLog[]
+}
+model Organization {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members OrganizationMember[]
+  assets Asset[]
+  scans Scan[]
+  findings Finding[]
+  auditLogs AuditLog[]
+}
+model OrganizationMember {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  userId String @db.Uuid
+  role MemberRole @default(MEMBER)
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@unique([organizationId,userId])
+}
+model Asset {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  baseUrl String
+  normalizedHost String
+  scanningEnabled Boolean @default(true)
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  verifications AssetVerification[]
+  scans Scan[]
+  findings Finding[]
+  @@unique([organizationId,normalizedHost])
+}
+model AssetVerification {
+  id String @id @default(uuid()) @db.Uuid
+  assetId String @db.Uuid
+  method VerificationMethod
+  token String @unique
+  status VerificationStatus @default(PENDING)
+  failureReason String?
+  expiresAt DateTime
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  asset Asset @relation(fields:[assetId], references:[id], onDelete:Cascade)
+}
+model Scan {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  assetId String @db.Uuid
+  status ScanStatus @default(QUEUED)
+  stage String @default("Validation")
+  progress Int @default(0)
+  scope Json
+  cancelRequestedAt DateTime?
+  startedAt DateTime?
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  asset Asset @relation(fields:[assetId], references:[id], onDelete:Cascade)
+  jobs ScanJob[]
+  endpoints DiscoveredEndpoint[]
+  findings Finding[]
+  logs ScanLog[]
+}
+model ScanJob {
+  id String @id @default(uuid()) @db.Uuid
+  scanId String @db.Uuid
+  queueJobId String? @unique
+  status JobStatus @default(QUEUED)
+  attempt Int @default(0)
+  errorMessage String?
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  completedAt DateTime?
+  scan Scan @relation(fields:[scanId], references:[id], onDelete:Cascade)
+}
+model DiscoveredEndpoint {
+  id String @id @default(uuid()) @db.Uuid
+  scanId String @db.Uuid
+  url String
+  method String
+  parameters Json?
+  responseCode Int?
+  contentType String?
+  external Boolean @default(false)
+  createdAt DateTime @default(now())
+  scan Scan @relation(fields:[scanId], references:[id], onDelete:Cascade)
+  @@index([scanId,url])
+}
+model Finding {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  assetId String @db.Uuid
+  scanId String @db.Uuid
+  checkId String
+  title String
+  description String
+  category String
+  severity Severity
+  confidence Confidence
+  status FindingStatus @default(OPEN)
+  affectedUrl String
+  method String?
+  parameter String?
+  impact String
+  remediation String
+  fingerprint String
+  firstSeenAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  asset Asset @relation(fields:[assetId], references:[id], onDelete:Cascade)
+  scan Scan @relation(fields:[scanId], references:[id], onDelete:Cascade)
+  evidence FindingEvidence[]
+  events FindingEvent[]
+  @@index([organizationId,status,severity])
+  @@index([assetId,fingerprint])
+}
+model FindingEvidence {
+  id String @id @default(uuid()) @db.Uuid
+  findingId String @db.Uuid
+  requestMethod String?
+  requestUrl String?
+  requestHeaders Json?
+  requestBody String?
+  responseStatus Int?
+  responseHeaders Json?
+  responseExcerpt String?
+  capturedAt DateTime @default(now())
+  finding Finding @relation(fields:[findingId], references:[id], onDelete:Cascade)
+}
+model FindingEvent {
+  id String @id @default(uuid()) @db.Uuid
+  findingId String @db.Uuid
+  type String
+  message String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  finding Finding @relation(fields:[findingId], references:[id], onDelete:Cascade)
+}
+model ScanLog {
+  id String @id @default(uuid()) @db.Uuid
+  scanId String @db.Uuid
+  level String
+  stage String?
+  message String
+  metadata Json?
+  createdAt DateTime @default(now())
+  scan Scan @relation(fields:[scanId], references:[id], onDelete:Cascade)
+  @@index([scanId,createdAt])
+}
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  actorUserId String? @db.Uuid
+  action String
+  targetType String
+  targetId String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  actor User? @relation(fields:[actorUserId], references:[id], onDelete:SetNull)
+  @@index([organizationId,createdAt])
+}

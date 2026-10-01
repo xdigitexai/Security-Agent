@@ -1,0 +1,7 @@
+import type { SecurityCheck } from '@xdigitex/scanner-core';
+export const corsCheck:SecurityCheck={id:'cors.origin',name:'CORS behavior',category:'CORS',async run(ctx){
+ const origin='https://xdigitex-invalid.example'; const r=await ctx.http.request(ctx.assetUrl,{headers:{Origin:origin}}); const aco=r.headers['access-control-allow-origin']; const acc=r.headers['access-control-allow-credentials'];
+ if(aco===origin && acc?.toLowerCase()==='true') return [{checkId:this.id,title:'Credentialed reflected CORS origin',description:'The server reflected an arbitrary Origin and allowed credentials.',category:this.category,severity:'HIGH',confidence:'HIGH',affectedUrl:r.url,method:'GET',impact:'A malicious site may be able to make credentialed cross-origin requests if sensitive endpoints inherit this policy.',remediation:'Use an explicit allowlist and never reflect untrusted Origin values when credentials are enabled.',evidence:[r.evidence]}];
+ if(aco==='*' && acc?.toLowerCase()==='true') return [{checkId:this.id,title:'Inconsistent credentialed wildcard CORS',description:'The response combines wildcard ACAO with credentials.',category:this.category,severity:'LOW',confidence:'CONFIRMED',affectedUrl:r.url,method:'GET',impact:'Browsers reject this combination, but it indicates a potentially unsafe CORS configuration.',remediation:'Use a vetted explicit origin allowlist and align credential settings.',evidence:[r.evidence]}];
+ return [];
+}};

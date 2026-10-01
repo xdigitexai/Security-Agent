@@ -1,0 +1,1 @@
+export { checks } from './registry';

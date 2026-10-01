@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@xdigitex/database": ["packages/database/src/index.ts"],
+      "@xdigitex/shared": ["packages/shared/src/index.ts"],
+      "@xdigitex/types": ["packages/types/src/index.ts"],
+      "@xdigitex/scanner-core": ["packages/scanner-core/src/index.ts"],
+      "@xdigitex/security-checks": ["packages/security-checks/src/index.ts"]
+    }
+  }
+}
