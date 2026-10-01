@@ -12,9 +12,9 @@ const cfg=env();
 const redis=new IORedis(cfg.REDIS_URL,{maxRetriesPerRequest:null});
 async function log(scanId:string,stage:string,message:string,metadata?:unknown){await db.scanLog.create({data:{scanId,level:'INFO',stage,message,metadata:metadata as object|undefined}});}
 async function saveFinding(scan:any,f:SecurityFinding){
- const fp=findingFingerprint({checkId:f.checkId,affectedUrl:f.affectedUrl,method:f.method,parameter:f.parameter});
+ const fp=findingFingerprint({checkId:f.checkId,affectedUrl:f.affectedUrl,method:f.method,parameter:f.parameter,title:f.title});
  const existing=await db.finding.findFirst({where:{assetId:scan.assetId,fingerprint:fp},orderBy:{lastSeenAt:'desc'}});let row;
- if(existing){row=await db.finding.update({where:{id:existing.id},data:{scanId:scan.id,lastSeenAt:new Date(),status:FindingStatus.OPEN,severity:f.severity,confidence:f.confidence,description:f.description,impact:f.impact,remediation:f.remediation}});}
+ if(existing){row=await db.finding.update({where:{id:existing.id},data:{scanId:scan.id,lastSeenAt:new Date(),status:FindingStatus.OPEN,title:f.title,severity:f.severity,confidence:f.confidence,description:f.description,impact:f.impact,remediation:f.remediation}});}
  else{row=await db.finding.create({data:{organizationId:scan.organizationId,assetId:scan.assetId,scanId:scan.id,checkId:f.checkId,title:f.title,description:f.description,category:f.category,severity:f.severity,confidence:f.confidence,affectedUrl:f.affectedUrl,method:f.method,parameter:f.parameter,impact:f.impact,remediation:f.remediation,fingerprint:fp}});}
  for(const ev of f.evidence||[])await db.findingEvidence.create({data:{findingId:row.id,requestMethod:ev.requestMethod,requestUrl:ev.requestUrl,requestHeaders:ev.requestHeaders as object|undefined,requestBody:ev.requestBody,responseStatus:ev.responseStatus,responseHeaders:ev.responseHeaders as object|undefined,responseExcerpt:ev.responseExcerpt,capturedAt:ev.timestamp}});
  await db.findingEvent.create({data:{findingId:row.id,type:'DETECTED',message:'Detected during scan'}});
