@@ -1,5 +1,5 @@
 {
  "name":"@xdigitex/web","version":"0.1.0","private":true,"scripts":{"dev":"next dev -H 0.0.0.0","build":"next build","start":"next start -H 0.0.0.0","typecheck":"tsc --noEmit","lint":"eslint ."},
- "dependencies":{"@xdigitex/database":"*","@xdigitex/scanner-core":"*","@xdigitex/shared":"*","@xdigitex/types":"*","argon2":"^0.44.0","bullmq":"^5.58.5","ioredis":"^5.7.0","jose":"^6.1.0","next":"16.3.8","react":"19.2.0","react-dom":"19.2.0","zod":"^4.1.11"},
- "devDependencies":{"@types/react":"^19.1.16","@types/react-dom":"^19.1.9","eslint":"^9.36.0","eslint-config-next":"16.3.8","tailwindcss":"^4.1.14","@tailwindcss/postcss":"^4.1.14"}
+ "dependencies":{"@xdigitex/database":"*","@xdigitex/scanner-core":"*","@xdigitex/shared":"*","@xdigitex/types":"*","argon2":"^0.44.0","bullmq":"^5.58.5","ioredis":"^5.7.0","jose":"^6.1.0","next":"16.3.8","pdfkit":"^0.17.2","react":"19.2.0","react-dom":"19.2.0","zod":"^4.1.11"},
+ "devDependencies":{"@types/pdfkit":"^0.17.3","@types/react":"^19.1.16","@types/react-dom":"^19.1.9","eslint":"^9.36.0","eslint-config-next":"16.3.8","tailwindcss":"^4.1.14","@tailwindcss/postcss":"^4.1.14"}
 }
