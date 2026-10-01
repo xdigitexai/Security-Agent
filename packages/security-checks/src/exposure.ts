@@ -20,13 +20,13 @@ const candidates:Candidate[]=[
   {path:'/database.sql',title:'Database dump publicly exposed',category:'Data Exposure',severity:'HIGH',signature:/(?:CREATE TABLE|INSERT INTO|-- (?:MySQL|PostgreSQL)|pg_dump)/i,description:'A database export appears publicly readable.',impact:'A database dump can expose application data, account records, hashes, secrets and schema information.',remediation:'Immediately remove the dump from public hosting, review access logs, rotate exposed secrets and assess affected data.'},
   {path:'/db.sql',title:'Database dump publicly exposed',category:'Data Exposure',severity:'HIGH',signature:/(?:CREATE TABLE|INSERT INTO|-- (?:MySQL|PostgreSQL)|pg_dump)/i,description:'A database export appears publicly readable.',impact:'Database exports may expose highly sensitive application data.',remediation:'Remove public dumps immediately and perform credential/data exposure review.'},
   {path:'/dump.sql',title:'Database dump publicly exposed',category:'Data Exposure',severity:'HIGH',signature:/(?:CREATE TABLE|INSERT INTO|-- (?:MySQL|PostgreSQL)|pg_dump)/i,description:'A database export appears publicly readable.',impact:'Database exports may reveal user data, password hashes and application secrets.',remediation:'Remove the public dump and investigate possible exposure.'},
-  {path:'/backup.zip',title:'Public backup archive detected',category:'Source / Backup Exposure',severity:'HIGH',method:'HEAD',description:'A common backup archive path responds as an accessible resource.',impact:'Backup archives can contain source code, configuration, database exports and credentials.',remediation:'Remove backup archives from public paths and store backups in access-controlled storage.'},
-  {path:'/site.zip',title:'Public site archive detected',category:'Source / Backup Exposure',severity:'HIGH',method:'HEAD',description:'A common site archive path responds as an accessible resource.',impact:'Site archives may disclose source code and server-side configuration.',remediation:'Remove deployment archives from the public document root.'},
-  {path:'/backup.tar.gz',title:'Public backup archive detected',category:'Source / Backup Exposure',severity:'HIGH',method:'HEAD',description:'A common compressed backup path responds as an accessible resource.',impact:'Backup archives can disclose source, secrets and application data.',remediation:'Move backups to private storage and deny public access.'}
+  {path:'/backup.zip',title:'Public backup archive detected',category:'Source / Backup Exposure',severity:'HIGH',method:'HEAD',description:'A common backup archive path responds with archive/download metadata.',impact:'Backup archives can contain source code, configuration, database exports and credentials.',remediation:'Remove backup archives from public paths and store backups in access-controlled storage.'},
+  {path:'/site.zip',title:'Public site archive detected',category:'Source / Backup Exposure',severity:'HIGH',method:'HEAD',description:'A common site archive path responds with archive/download metadata.',impact:'Site archives may disclose source code and server-side configuration.',remediation:'Remove deployment archives from the public document root.'},
+  {path:'/backup.tar.gz',title:'Public backup archive detected',category:'Source / Backup Exposure',severity:'HIGH',method:'HEAD',description:'A common compressed backup path responds with archive/download metadata.',impact:'Backup archives can disclose source, secrets and application data.',remediation:'Move backups to private storage and deny public access.'}
 ];
 
 function normalizeBody(body:string){return body.slice(0,2500).replace(/[a-f0-9]{16,}/gi,'#').replace(/\d{6,}/g,'#').replace(/\s+/g,' ').trim();}
-function looksLikeArchive(r:{headers:Record<string,string>},path:string){const ct=(r.headers['content-type']||'').toLowerCase();const cd=(r.headers['content-disposition']||'').toLowerCase();return /(?:zip|gzip|x-tar|octet-stream)/.test(ct)||/attachment/.test(cd)||/\.(?:zip|tar\.gz)$/i.test(path);}
+function looksLikeArchive(r:{headers:Record<string,string>}){const ct=(r.headers['content-type']||'').toLowerCase();const cd=(r.headers['content-disposition']||'').toLowerCase();return /(?:application\/(?:zip|gzip|x-gzip|x-tar|octet-stream)|application\/x-compressed)/.test(ct)||/attachment\s*;/.test(cd);}
 
 export const exposureCheck:SecurityCheck={id:'exposure.artifacts',name:'Exposed files, backups and diagnostics',category:'Exposure Discovery',async run(ctx){
   const out=[];const base=new URL(ctx.assetUrl);const miss=new URL(`/xdigitex-not-found-${Date.now().toString(36)}-a91f`,base).toString();
@@ -37,13 +37,14 @@ export const exposureCheck:SecurityCheck={id:'exposure.artifacts',name:'Exposed 
     try{r=await ctx.http.request(url,{method:c.method||'GET'});}catch{continue;}
     if(r.status<200||r.status>=300)continue;
     if(c.method==='HEAD'){
-      if(!looksLikeArchive(r,c.path))continue;
+      if(!looksLikeArchive(r))continue;
+      if(baseline&&r.status===baseline.status&&(r.headers['content-type']||'')===(baseline.headers['content-type']||''))continue;
     }else{
       const body=normalizeBody(r.body);if(!body)continue;
       if(baseline&&r.status===baseline.status&&baselineBody&&body===baselineBody)continue;
       if(c.signature&&!c.signature.test(r.body))continue;
     }
-    out.push(finding({checkId:this.id,title:c.title,description:c.description,category:c.category,severity:c.severity,confidence:c.method==='HEAD'?'HIGH':'CONFIRMED',affectedUrl:r.url,method:c.method||'GET',impact:c.impact,remediation:c.remediation,evidence:[{...r.evidence,responseExcerpt:c.method==='HEAD'?'Resource responded successfully; body was not downloaded.':'Signature matched; response content omitted/redacted from this finding.'}]}));
+    out.push(finding({checkId:this.id,title:c.title,description:c.description,category:c.category,severity:c.severity,confidence:c.method==='HEAD'?'HIGH':'CONFIRMED',affectedUrl:r.url,method:c.method||'GET',impact:c.impact,remediation:c.remediation,evidence:[{...r.evidence,responseExcerpt:c.method==='HEAD'?'Archive/download response metadata confirmed; body was not downloaded.':'Signature matched; response content omitted/redacted from this finding.'}]}));
   }
   return out;
 }};
