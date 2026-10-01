@@ -45,3 +45,20 @@ export interface DiscoveredEndpointInput {
   responseCode?: number;
   contentType?: string;
 }
+
+export type ApplicationSurfaceKind = 'AUTH'|'ADMIN'|'UPLOAD'|'PAYMENT'|'API'|'GRAPHQL'|'API_DOCS'|'WEBSOCKET'|'ACCOUNT'|'SEARCH'|'OTHER';
+export interface ApplicationSurface { kind:ApplicationSurfaceKind; url:string; method:string; source:'page'|'network'|'form'|'script'|'websocket'; parameters?:string[]; }
+export interface TechnologySignal { name:string; evidence:string; }
+export interface ApplicationMap {
+  surfaces: ApplicationSurface[];
+  technologies: TechnologySignal[];
+  externalDependencies: string[];
+  authUrls: string[];
+  apiUrls: string[];
+  adminUrls: string[];
+  uploadUrls: string[];
+  paymentUrls: string[];
+  graphqlUrls: string[];
+  apiDocsUrls: string[];
+  websocketUrls: string[];
+}

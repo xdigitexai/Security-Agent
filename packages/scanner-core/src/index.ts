@@ -3,3 +3,4 @@ export * from './ssrf';
 export * from './http-client';
 export * from './crawler';
 export * from './orchestrator';
+export * from './application-map';

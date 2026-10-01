@@ -15,6 +15,7 @@ export async function crawl(startUrl:string, scope:ScanScope, isCanceled:()=>Pro
       const safe=await validateScopedUrl(url,scope); seen.add(safe.toString());
       const page=await context.newPage();
       page.on('request',req=>{ try{ const u=new URL(req.url()); if(hostAllowed(u.hostname,scope)) endpoints.set(`${req.method()} ${u}`,{url:u.toString(),method:req.method()}); else external.add(u.origin);}catch{} });
+      page.on('websocket',ws=>{try{const u=new URL(ws.url());if(hostAllowed(u.hostname,scope))endpoints.set(`WEBSOCKET ${u}`,{url:u.toString(),method:'WEBSOCKET'});else external.add(u.origin);}catch{}});
       await page.route('**/*',async route=>{ try{ const u=new URL(route.request().url()); if(!hostAllowed(u.hostname,scope)){external.add(u.origin);return route.abort();} await validateScopedUrl(u,scope); return route.continue(); }catch{return route.abort();} });
       try{
         await page.goto(safe.toString(),{waitUntil:'domcontentloaded',timeout:15000});

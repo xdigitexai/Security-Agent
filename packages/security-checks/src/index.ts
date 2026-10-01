@@ -1,1 +1,1 @@
-export { checks } from './registry';
+export { checks, checkById } from './registry';

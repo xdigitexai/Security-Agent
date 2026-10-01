@@ -1,6 +1,6 @@
-import type { ScanScope, SecurityFinding, DiscoveredEndpointInput } from '@xdigitex/types';
+import type { ScanScope, SecurityFinding, DiscoveredEndpointInput, ApplicationMap } from '@xdigitex/types';
 import { ScanHttpClient } from './http-client';
-export interface ScanContext { assetUrl:string; scope:ScanScope; http:ScanHttpClient; pages:string[]; endpoints:DiscoveredEndpointInput[]; scripts:string[]; isCanceled:()=>Promise<boolean>; }
+export interface ScanContext { assetUrl:string; scope:ScanScope; http:ScanHttpClient; pages:string[]; endpoints:DiscoveredEndpointInput[]; scripts:string[]; applicationMap:ApplicationMap; isCanceled:()=>Promise<boolean>; }
 export interface SecurityCheck { id:string; name:string; category:string; run(context:ScanContext):Promise<SecurityFinding[]>; }
 export async function runChecks(context:ScanContext, checks:SecurityCheck[], onCheck?:(check:SecurityCheck,index:number)=>Promise<void>){
   const findings:SecurityFinding[]=[];

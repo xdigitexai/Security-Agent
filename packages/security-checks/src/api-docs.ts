@@ -1,0 +1,8 @@
+import type { SecurityCheck } from '@xdigitex/scanner-core';
+export const apiDocsCheck:SecurityCheck={id:'api.public-docs',name:'API documentation and GraphQL exposure',category:'API Security',async run(ctx){
+ const out=[]; const candidates=[...ctx.applicationMap.apiDocsUrls.map(url=>({url,kind:'docs'})),...ctx.applicationMap.graphqlUrls.map(url=>({url,kind:'graphql'}))].slice(0,8);
+ for(const c of candidates){ if(await ctx.isCanceled())break; let r;try{r=await ctx.http.request(c.url);}catch{continue;} if(r.status<200||r.status>=400)continue;
+   const marker=c.kind==='docs'?/openapi|swagger|api documentation/i:/graphiql|graphql/i; if(!marker.test(r.body))continue;
+   out.push({checkId:this.id,title:c.kind==='docs'?'Public API documentation discovered':'Public GraphQL interface discovered',description:c.kind==='docs'?'A first-party API documentation surface is publicly reachable. Exposure is not inherently vulnerable, but it can materially increase discoverability and should be intentional.':'A first-party GraphQL interface is publicly reachable. This is discovery evidence only; authorization must be assessed separately.',category:'API Security',severity:'INFORMATIONAL',confidence:'CONFIRMED',affectedUrl:r.url,method:'GET',impact:'Public interface metadata can help enumerate application capabilities when combined with other weaknesses.',remediation:'Keep the interface public only if intended. Ensure every operation enforces server-side authentication and authorization; restrict interactive documentation in production when unnecessary.',evidence:[r.evidence]});
+ } return out;
+}};
