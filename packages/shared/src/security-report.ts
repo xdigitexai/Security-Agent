@@ -101,33 +101,43 @@ function fallbackReport(input:SecurityReportInput):FullSecurityReport{
     securityPosture:highRisk?'Higher-risk weaknesses were recorded and should be addressed before expanding exposure or releasing sensitive changes.':'The executed checks did not record a critical/high issue; lower-severity findings and assessment limitations should still be reviewed.',
     riskOverview:risk,
     assessmentCoverage:`The assessment mapped ${input.endpointCount} URL/API surfaces${input.pageCount!=null?`, crawled ${input.pageCount} pages`:''}${input.requestCount!=null?`, and issued ${input.requestCount} bounded requests`:''}. Execution remained inside the ownership-verified scope and registered scanner modules.`,
-    attackSurfaceSummary:`Observed application coverage was derived from the verified first-party target, discovered pages, forms, scripts, API traffic, and registered checks. Third-party dependencies were not actively tested.`,
+    attackSurfaceSummary:'Observed application coverage was derived from the verified first-party target, discovered pages, forms, scripts, API traffic, and registered checks. Third-party dependencies were not actively tested.',
     keyFindings:sorted.slice(0,10).map(f=>({title:f.title,severity:String(f.severity),confidence:f.confidence,affectedUrl:f.affectedUrl,impact:f.impact,whyItMatters:f.description,remediationPriority:priorityFor(String(f.severity))})),
     prioritizedRemediation:sorted.slice(0,10).map(f=>({priority:priorityFor(String(f.severity)),title:f.title,reason:f.impact,action:f.remediation,validation:`Retest the affected ${f.method||'GET'} ${f.affectedUrl} after remediation and confirm the original evidence is no longer reproducible.`})),
-    technicalSummary:`Findings were produced only by registered Xdigitex checks through the centralized bounded HTTP/browser layer. Evidence is sanitized before storage and reporting.`,
+    technicalSummary:'Findings were produced only by registered Xdigitex checks through the centralized bounded HTTP/browser layer. Evidence is sanitized before storage and reporting.',
     positiveObservations:risk.total===0?['No finding was produced by the executed registered checks.']:[],
     limitations:['Automated coverage is limited by verified scope, crawl visibility, request caps, registered scanner modules, and any owner-provided test identities.','Absence of a finding does not prove absence of a vulnerability.','Unrelated third-party systems and destructive exploitation were excluded from testing.'],
     nextActions:sorted.length?['Remediate P0/P1 issues first.','Apply the recommended fixes and run focused retests.','Run another comprehensive assessment after major remediation or deployment changes.']:['Review the mapped attack surface and coverage limitations.','Add authorized test identities/resources when deeper authorization testing is required.','Repeat the assessment after material application changes.']
   };
 }
 
+function safeText(value:unknown,fallback:string,max=6000){
+  return typeof value==='string'&&value.trim()?value.trim().slice(0,max):fallback;
+}
+
+function safeList(value:unknown,fallback:string[]){
+  if(!Array.isArray(value))return fallback;
+  const items=value.filter((x):x is string=>typeof x==='string'&&x.trim().length>0).slice(0,20).map(x=>x.trim().slice(0,1200));
+  return items.length?items:fallback;
+}
+
 function normalizeReport(ai:Partial<FullSecurityReport>,fallback:FullSecurityReport):FullSecurityReport{
-  const arr=(value:unknown,backup:string[])=>Array.isArray(value)?value.slice(0,20).map(String):backup;
-  const objects=<T>(value:unknown,backup:T[])=>Array.isArray(value)?value.slice(0,20) as T[]:backup;
   return {
     generatedBy:'deepseek-flash',
     generatedAt:new Date().toISOString(),
-    executiveSummary:String(ai.executiveSummary||fallback.executiveSummary),
-    securityPosture:String(ai.securityPosture||fallback.securityPosture),
+    executiveSummary:safeText(ai.executiveSummary,fallback.executiveSummary),
+    securityPosture:safeText(ai.securityPosture,fallback.securityPosture),
     riskOverview:fallback.riskOverview,
-    assessmentCoverage:String(ai.assessmentCoverage||fallback.assessmentCoverage),
-    attackSurfaceSummary:String(ai.attackSurfaceSummary||fallback.attackSurfaceSummary),
-    keyFindings:objects(ai.keyFindings,fallback.keyFindings),
-    prioritizedRemediation:objects(ai.prioritizedRemediation,fallback.prioritizedRemediation),
-    technicalSummary:String(ai.technicalSummary||fallback.technicalSummary),
-    positiveObservations:arr(ai.positiveObservations,fallback.positiveObservations),
-    limitations:arr(ai.limitations,fallback.limitations),
-    nextActions:arr(ai.nextActions,fallback.nextActions)
+    assessmentCoverage:safeText(ai.assessmentCoverage,fallback.assessmentCoverage),
+    attackSurfaceSummary:safeText(ai.attackSurfaceSummary,fallback.attackSurfaceSummary),
+    // Finding identity, severity, affected URL, impact and remediation remain deterministic
+    // scanner-derived data. The model never gets authority to create or mutate findings.
+    keyFindings:fallback.keyFindings,
+    prioritizedRemediation:fallback.prioritizedRemediation,
+    technicalSummary:safeText(ai.technicalSummary,fallback.technicalSummary),
+    positiveObservations:safeList(ai.positiveObservations,fallback.positiveObservations),
+    limitations:safeList(ai.limitations,fallback.limitations),
+    nextActions:safeList(ai.nextActions,fallback.nextActions)
   };
 }
 
@@ -141,7 +151,7 @@ export async function generateSecurityReport(input:SecurityReportInput):Promise<
     remediation:f.remediation,status:f.status
   }));
 
-  const system=`You are DeepSeek Flash acting as the reporting brain for an authorized defensive application-security assessment. Return valid JSON only. The supplied scanner findings are the source of truth. Never invent a vulnerability, endpoint, credential, exploit result, financial impact, affected user, or successful attack that is not present in the input. Do not claim a test was performed unless reflected in the supplied coverage. Write an executive-ready but technically useful report. Prioritize confirmed evidence and explain uncertainty. Keep remediation concrete and validation steps non-destructive.`;
+  const system=`You are DeepSeek Flash acting as the reporting brain for an authorized defensive application-security assessment. Return valid JSON only. The supplied scanner findings are the source of truth. Never invent a vulnerability, endpoint, credential, exploit result, financial impact, affected user, or successful attack that is not present in the input. Do not claim a test was performed unless reflected in the supplied coverage. Write an executive-ready but technically useful report. Prioritize confirmed evidence and explain uncertainty. Keep remediation concrete and validation steps non-destructive. Xdigitex will independently derive the canonical finding list and remediation records from scanner evidence, so your job is to produce the narrative report sections only.`;
   const user=JSON.stringify({
     target:input.target,
     scanId:input.scanId,
@@ -154,8 +164,6 @@ export async function generateSecurityReport(input:SecurityReportInput):Promise<
       securityPosture:'string',
       assessmentCoverage:'string',
       attackSurfaceSummary:'string',
-      keyFindings:[{title:'string',severity:'string',confidence:'string',affectedUrl:'string',impact:'string',whyItMatters:'string',remediationPriority:'P0|P1|P2|P3'}],
-      prioritizedRemediation:[{priority:'P0|P1|P2|P3',title:'string',reason:'string',action:'string',validation:'string'}],
       technicalSummary:'string',
       positiveObservations:['string'],
       limitations:['string'],
