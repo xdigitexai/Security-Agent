@@ -1,21 +1,29 @@
 import { env } from './env';
 
+export const DEEPSEEK_FLASH_MODEL='deepseek-flash' as const;
+
 export interface DeepSeekJsonOptions {
   maxTokens?:number;
   temperature?:number;
+  thinking?:'enabled'|'disabled';
+  reasoningEffort?:'low'|'high'|'max';
 }
 
 export async function deepseekJson<T>(system:string,user:string,options:DeepSeekJsonOptions={}):Promise<T|null>{
   const cfg=env();
   if(!cfg.DEEPSEEK_API_KEY) return null;
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),60_000);
+  const timer=setTimeout(()=>controller.abort(),90_000);
+  const thinking=options.thinking==='enabled'
+    ? {type:'enabled',reasoning_effort:options.reasoningEffort??'high'}
+    : {type:'disabled'};
   try{
     const res=await fetch(`${cfg.DEEPSEEK_BASE_URL.replace(/\/$/,'')}/chat/completions`,{
       method:'POST',
       headers:{'content-type':'application/json','authorization':`Bearer ${cfg.DEEPSEEK_API_KEY}`},
       body:JSON.stringify({
-        model:'deepseek-flash',
+        model:DEEPSEEK_FLASH_MODEL,
+        thinking,
         response_format:{type:'json_object'},
         temperature:options.temperature??0.1,
         max_tokens:Math.max(500,Math.min(options.maxTokens??3000,16000)),
