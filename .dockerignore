@@ -1,0 +1,44 @@
+# Build context hygiene.
+#
+# Without this file the Dockerfiles' `COPY . .` pulls whatever happens to sit in
+# the checkout into the image — including a local .env. That bakes live secrets
+# (DEEPSEEK_API_KEY, SESSION_SECRET, database credentials) into the image layers,
+# where they survive in every layer that copied them and travel with the image
+# anywhere it is pushed, tagged or exported.
+#
+# docker compose passes these at runtime instead, via `env_file: .env` and the
+# per-service `environment:` blocks, so the running containers still receive them.
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+auth.json
+
+# Version control and editor state
+.git
+.gitignore
+.dockerignore
+.idea
+.vscode
+.fleet
+
+# Installed dependencies and build output: each image installs its own, and a
+# host copy is the wrong platform anyway.
+node_modules
+**/node_modules
+.next
+**/.next
+public/build
+public/hot
+public/storage
+
+# Runtime noise and caches
+*.log
+coverage
+.phpunit.cache
+.phpunit.result.cache
+**/.turbo
+**/.cache
