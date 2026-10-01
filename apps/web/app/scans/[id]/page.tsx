@@ -7,6 +7,10 @@ import AutoRefresh from './auto-refresh';
 
 export const dynamic='force-dynamic';
 
+function isFullReport(value:unknown):value is FullSecurityReport{
+  return !!value&&typeof value==='object'&&typeof (value as any).executiveSummary==='string'&&Array.isArray((value as any).prioritizedRemediation)&&Array.isArray((value as any).keyFindings);
+}
+
 export default async function Page({params}:{params:Promise<{id:string}>}){
   if(!await currentUser())redirect('/login');
   const {org}=await requireOrg();
@@ -17,7 +21,7 @@ export default async function Page({params}:{params:Promise<{id:string}>}){
   });
   if(!s)notFound();
   const plan=s.agentPlan as any;
-  const report=(s.agentReport||null) as unknown as FullSecurityReport|null;
+  const report=isFullReport(s.agentReport)?s.agentReport:null;
   const active=['QUEUED','RUNNING'].includes(s.status);
   const severity=(name:string)=>s.findings.filter(f=>f.severity===name).length;
   const critical=severity('CRITICAL');const high=severity('HIGH');
@@ -45,7 +49,7 @@ export default async function Page({params}:{params:Promise<{id:string}>}){
       <div className="card stat-card"><div className="stat-label">Mapped surfaces</div><div><div className="metric">{s._count.endpoints}</div><div className="metric-sub">URLs and API observations</div></div></div>
       <div className="card stat-card"><div className="stat-label">Findings</div><div><div className="metric">{s._count.findings}</div><div className="metric-sub">Recorded in this operation</div></div></div>
       <div className="card stat-card"><div className="stat-label">Critical / high</div><div><div className={`metric ${critical+high?'metric-danger':''}`}>{critical+high}</div><div className="metric-sub">Prioritized remediation</div></div></div>
-      <div className="card stat-card"><div className="stat-label">Report engine</div><div><div className="metric" style={{fontSize:18}}>{report?.generatedBy==='deepseek-flash'?'DeepSeek Flash':s.status==='COMPLETED'?'Fallback':'Pending'}</div><div className="metric-sub">Generated after verification</div></div></div>
+      <div className="card stat-card"><div className="stat-label">Report engine</div><div><div className="metric" style={{fontSize:18}}>{report?.generatedBy==='deepseek-flash'?'DeepSeek Flash':s.status==='COMPLETED'?'Ready':'Pending'}</div><div className="metric-sub">Generated after verification</div></div></div>
     </section>
 
     {plan&&<section className="card">
