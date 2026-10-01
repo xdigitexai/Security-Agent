@@ -5,111 +5,25 @@ import { db } from '@xdigitex/database';
 import { generateSecurityReport, type FullSecurityReport } from '@xdigitex/shared';
 
 export const runtime='nodejs';
-
-function isFullReport(value:unknown):value is FullSecurityReport{
-  return !!value&&typeof value==='object'&&typeof (value as any).executiveSummary==='string'&&Array.isArray((value as any).prioritizedRemediation);
-}
-
-async function ensureReport(scan:any):Promise<FullSecurityReport>{
-  if(isFullReport(scan.agentReport))return scan.agentReport;
-  const report=await generateSecurityReport({
-    target:scan.asset.baseUrl,
-    scanId:scan.id,
-    prompt:scan.agentPrompt,
-    plan:scan.agentPlan,
-    findings:scan.findings.map((f:any)=>({title:f.title,severity:f.severity,confidence:f.confidence,category:f.category,affectedUrl:f.affectedUrl,method:f.method,description:f.description,impact:f.impact,remediation:f.remediation,status:f.status})),
-    endpointCount:scan._count?.endpoints||0,
-    scope:scan.scope
-  });
-  await db.scan.update({where:{id:scan.id},data:{agentReport:report as any}});
-  return report;
-}
+function isFullReport(value:unknown):value is FullSecurityReport{return !!value&&typeof value==='object'&&typeof (value as any).executiveSummary==='string'&&Array.isArray((value as any).prioritizedRemediation);}
+async function ensureReport(scan:any):Promise<FullSecurityReport>{if(isFullReport(scan.agentReport))return scan.agentReport;const report=await generateSecurityReport({target:scan.asset.baseUrl,scanId:scan.id,prompt:scan.agentPrompt,plan:scan.agentPlan,findings:scan.findings.map((f:any)=>({title:f.title,severity:f.severity,confidence:f.confidence,category:f.category,affectedUrl:f.affectedUrl,method:f.method,description:f.description,impact:f.impact,remediation:f.remediation,status:f.status})),endpointCount:scan._count?.endpoints||0,scope:scan.scope});await db.scan.update({where:{id:scan.id},data:{agentReport:report as any}});return report;}
 
 function pdfBuffer(scan:any,report:FullSecurityReport){return new Promise<Buffer>((resolve,reject)=>{
-  const doc=new PDFDocument({size:'A4',margin:48,info:{Title:`Xdigitex Security Report - ${scan.asset.normalizedHost}`,Author:'Xdigitex Security Agent',Subject:'Authorized defensive application security assessment'}});
-  const chunks:Buffer[]=[];doc.on('data',(c:Buffer)=>chunks.push(c));doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject);
-  const heading=(text:string,size=15)=>{doc.moveDown(.9).font('Helvetica-Bold').fontSize(size).fillColor('#101828').text(text).font('Helvetica').fontSize(9.5).fillColor('#27364a');};
-  const bullet=(text:string)=>doc.text(`• ${text}`,{indent:8,paragraphGap:3});
-  const label=(name:string,value:string)=>{doc.font('Helvetica-Bold').fillColor('#101828').text(`${name}: `,{continued:true});doc.font('Helvetica').fillColor('#344054').text(value);};
-
-  doc.rect(0,0,595,130).fill('#0b1220');
-  doc.fillColor('#7dd3fc').font('Helvetica-Bold').fontSize(10).text('XDIGITEX SECURITY AGENT',48,42);
-  doc.fillColor('#ffffff').fontSize(24).text('Application Security Assessment',48,61);
-  doc.fillColor('#b8c5d6').font('Helvetica').fontSize(10).text(scan.asset.baseUrl,48,96);
-  doc.y=154;
-  label('Scan ID',scan.id);
-  label('Completed',(scan.completedAt||scan.createdAt).toISOString());
-  label('Status',scan.status);
-  label('Report engine',report.generatedBy==='deepseek-flash'?'DeepSeek V4.1 Flash':'Deterministic fallback');
-  label('Original mission',scan.agentPrompt||'Comprehensive authorized security assessment');
-
-  heading('Executive Summary',18);doc.text(report.executiveSummary,{lineGap:2});
-  heading('Security Posture');doc.text(report.securityPosture,{lineGap:2});
-
-  heading('Risk Overview');
-  const risk=report.riskOverview;
-  doc.text(`Total findings: ${risk.total}    Critical: ${risk.critical}    High: ${risk.high}    Medium: ${risk.medium}    Low: ${risk.low}    Informational: ${risk.informational}`);
-  doc.text(`Confirmed / high-confidence findings: ${risk.confirmed}`);
-
+  const doc=new PDFDocument({size:'A4',margin:48,info:{Title:`Xdigitex Security Report - ${scan.asset.normalizedHost}`,Author:'Xdigitex Security Agent',Subject:'Authorized defensive application security assessment'}});const chunks:Buffer[]=[];doc.on('data',(c:Buffer)=>chunks.push(c));doc.on('end',()=>resolve(Buffer.concat(chunks)));doc.on('error',reject);
+  const heading=(text:string,size=15)=>{doc.moveDown(.9).font('Helvetica-Bold').fontSize(size).fillColor('#101828').text(text).font('Helvetica').fontSize(9.5).fillColor('#27364a');};const bullet=(text:string)=>doc.text(`• ${text}`,{indent:8,paragraphGap:3});const label=(name:string,value:string)=>{doc.font('Helvetica-Bold').fillColor('#101828').text(`${name}: `,{continued:true});doc.font('Helvetica').fillColor('#344054').text(value);};
+  doc.rect(0,0,595,130).fill('#0b1220');doc.fillColor('#7dd3fc').font('Helvetica-Bold').fontSize(10).text('XDIGITEX SECURITY AGENT',48,42);doc.fillColor('#ffffff').fontSize(24).text('Application Security Assessment',48,61);doc.fillColor('#b8c5d6').font('Helvetica').fontSize(10).text(scan.asset.baseUrl,48,96);doc.y=154;
+  label('Scan ID',scan.id);label('Completed',(scan.completedAt||scan.createdAt).toISOString());label('Status',scan.status);label('Report engine',report.generatedBy==='deepseek-flash'?'DeepSeek Flash':'Deterministic fallback');label('Original mission',scan.agentPrompt||'Comprehensive authorized security assessment');
+  heading('Executive Summary',18);doc.text(report.executiveSummary,{lineGap:2});heading('Security Posture');doc.text(report.securityPosture,{lineGap:2});
+  heading('Risk Overview');const risk=report.riskOverview;doc.text(`Total findings: ${risk.total}    Critical: ${risk.critical}    High: ${risk.high}    Medium: ${risk.medium}    Low: ${risk.low}    Informational: ${risk.informational}`);doc.text(`Confirmed / high-confidence findings: ${risk.confirmed}`);
   heading('Assessment Coverage');doc.text(report.assessmentCoverage,{lineGap:2});
+  const coverage=(report as any).checkCoverage||{completed:[],skipped:[]};
+  if(coverage.completed.length||coverage.skipped.length){heading('Scanner Module Assurance');doc.text(`Completed modules: ${coverage.completed.length}`);coverage.completed.forEach((id:string)=>bullet(`COMPLETED · ${id}`));doc.text(`Skipped modules: ${coverage.skipped.length}`);coverage.skipped.forEach((x:any)=>bullet(`SKIPPED · ${x.id}${x.error?` · ${x.error}`:''}`));doc.moveDown(.3).text('Negative security conclusions are supported only by modules that completed successfully.');}
   heading('Attack Surface Summary');doc.text(report.attackSurfaceSummary,{lineGap:2});
-
-  if(report.keyFindings.length){
-    heading('Key Findings');
-    report.keyFindings.forEach((f,i)=>{
-      doc.moveDown(.45).font('Helvetica-Bold').fontSize(11).fillColor('#101828').text(`${i+1}. ${f.title}`);
-      doc.font('Helvetica').fontSize(9).fillColor('#344054');
-      doc.text(`${f.severity} · ${f.confidence} · ${f.remediationPriority}`);
-      doc.text(f.affectedUrl,{link:f.affectedUrl,underline:false});
-      doc.text(`Impact: ${f.impact}`);
-      doc.text(`Why it matters: ${f.whyItMatters}`);
-    });
-  }
-
-  if(report.prioritizedRemediation.length){
-    heading('Prioritized Remediation Plan');
-    report.prioritizedRemediation.forEach((item,i)=>{
-      doc.moveDown(.45).font('Helvetica-Bold').fontSize(10.5).fillColor('#101828').text(`${i+1}. [${item.priority}] ${item.title}`);
-      doc.font('Helvetica').fontSize(9).fillColor('#344054');
-      doc.text(`Reason: ${item.reason}`);
-      doc.text(`Action: ${item.action}`);
-      doc.text(`Validation: ${item.validation}`);
-    });
-  }
-
-  heading('Technical Assessment Summary');doc.text(report.technicalSummary,{lineGap:2});
-  heading('Detailed Technical Findings');
-  if(!scan.findings.length)doc.text('No finding was recorded by the executed registered checks.');
-  scan.findings.forEach((f:any,index:number)=>{
-    doc.moveDown(.8).font('Helvetica-Bold').fontSize(11).fillColor('#101828').text(`${index+1}. ${f.title}`);
-    doc.font('Helvetica').fontSize(8.8).fillColor('#344054');
-    doc.text(`Severity: ${f.severity}   Confidence: ${f.confidence}   Status: ${f.status}`);
-    doc.text(`Category: ${f.category}`);doc.text(`Affected: ${f.method||'GET'} ${f.affectedUrl}`);
-    doc.moveDown(.2).font('Helvetica-Bold').text('Description');doc.font('Helvetica').text(f.description);
-    doc.font('Helvetica-Bold').text('Impact');doc.font('Helvetica').text(f.impact);
-    doc.font('Helvetica-Bold').text('Recommended Fix');doc.font('Helvetica').text(f.remediation);
-    const ev=f.evidence?.[0];if(ev){doc.font('Helvetica-Bold').text('Sanitized Evidence');doc.font('Helvetica').text(`HTTP ${ev.responseStatus??''} ${ev.requestUrl||f.affectedUrl}`);if(ev.responseExcerpt)doc.text(String(ev.responseExcerpt).slice(0,1200));}
-  });
-
-  if(report.positiveObservations.length){heading('Positive Observations');report.positiveObservations.forEach(bullet);}
-  heading('Limitations and Boundaries');
-  doc.text('Testing was limited to ownership-verified first-party scope and registered bounded security modules. Destructive exploitation, credential theft, uncontrolled denial-of-service activity, and active testing of unrelated third-party services were excluded.');
-  report.limitations.forEach(bullet);
-  if(report.nextActions.length){heading('Next Actions');report.nextActions.forEach((x,i)=>doc.text(`${i+1}. ${x}`,{paragraphGap:3}));}
-
-  doc.moveDown(1.4).fontSize(8).fillColor('#667085').text(`Generated ${report.generatedAt} · Xdigitex Security Agent · ${report.generatedBy}`);
-  doc.end();
+  if(report.keyFindings.length){heading('Key Findings');report.keyFindings.forEach((f,i)=>{doc.moveDown(.45).font('Helvetica-Bold').fontSize(11).fillColor('#101828').text(`${i+1}. ${f.title}`);doc.font('Helvetica').fontSize(9).fillColor('#344054');doc.text(`${f.severity} · ${f.confidence} · ${f.remediationPriority}`);doc.text(f.affectedUrl,{link:f.affectedUrl,underline:false});doc.text(`Impact: ${f.impact}`);doc.text(`Why it matters: ${f.whyItMatters}`);});}
+  if(report.prioritizedRemediation.length){heading('Prioritized Remediation Plan');report.prioritizedRemediation.forEach((item,i)=>{doc.moveDown(.45).font('Helvetica-Bold').fontSize(10.5).fillColor('#101828').text(`${i+1}. [${item.priority}] ${item.title}`);doc.font('Helvetica').fontSize(9).fillColor('#344054');doc.text(`Reason: ${item.reason}`);doc.text(`Action: ${item.action}`);doc.text(`Validation: ${item.validation}`);});}
+  heading('Technical Assessment Summary');doc.text(report.technicalSummary,{lineGap:2});heading('Detailed Technical Findings');if(!scan.findings.length)doc.text('No finding was recorded by the executed registered checks.');scan.findings.forEach((f:any,index:number)=>{doc.moveDown(.8).font('Helvetica-Bold').fontSize(11).fillColor('#101828').text(`${index+1}. ${f.title}`);doc.font('Helvetica').fontSize(8.8).fillColor('#344054');doc.text(`Severity: ${f.severity}   Confidence: ${f.confidence}   Status: ${f.status}`);doc.text(`Category: ${f.category}`);doc.text(`Affected: ${f.method||'GET'} ${f.affectedUrl}`);doc.moveDown(.2).font('Helvetica-Bold').text('Description');doc.font('Helvetica').text(f.description);doc.font('Helvetica-Bold').text('Impact');doc.font('Helvetica').text(f.impact);doc.font('Helvetica-Bold').text('Recommended Fix');doc.font('Helvetica').text(f.remediation);const ev=f.evidence?.[0];if(ev){doc.font('Helvetica-Bold').text('Sanitized Evidence');doc.font('Helvetica').text(`HTTP ${ev.responseStatus??''} ${ev.requestUrl||f.affectedUrl}`);if(ev.responseExcerpt)doc.text(String(ev.responseExcerpt).slice(0,1200));}});
+  if(report.positiveObservations.length){heading('Positive Observations');report.positiveObservations.forEach(bullet);}heading('Limitations and Boundaries');doc.text('Testing was limited to ownership-verified first-party scope and registered bounded security modules. Destructive exploitation, credential theft, uncontrolled denial-of-service activity, and active testing of unrelated third-party services were excluded.');report.limitations.forEach(bullet);if(report.nextActions.length){heading('Next Actions');report.nextActions.forEach((x,i)=>doc.text(`${i+1}. ${x}`,{paragraphGap:3}));}
+  doc.moveDown(1.4).fontSize(8).fillColor('#667085').text(`Generated ${report.generatedAt} · Xdigitex Security Agent · ${report.generatedBy}`);doc.end();
 });}
 
-export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}){
-  const {org}=await requireOrg();const {id}=await params;
-  const scan=await db.scan.findFirst({
-    where:{id,organizationId:org.id},
-    include:{asset:true,_count:{select:{endpoints:true}},findings:{include:{evidence:{take:1,orderBy:{capturedAt:'desc'}}},orderBy:[{severity:'asc'},{createdAt:'asc'}]}}
-  });
-  if(!scan)return new NextResponse('Not found',{status:404});
-  if(scan.status!=='COMPLETED')return new NextResponse('Report is available after the scan completes.',{status:409});
-  const report=await ensureReport(scan);
-  const pdf=await pdfBuffer(scan,report);const safe=scan.asset.normalizedHost.replace(/[^a-z0-9.-]+/gi,'-');
-  return new NextResponse(new Uint8Array(pdf),{headers:{'content-type':'application/pdf','content-disposition':`attachment; filename="xdigitex-security-${safe}-${scan.id.slice(0,8)}.pdf"`,'cache-control':'private, no-store'}});
-}
+export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}){const {org}=await requireOrg();const {id}=await params;const scan=await db.scan.findFirst({where:{id,organizationId:org.id},include:{asset:true,_count:{select:{endpoints:true}},findings:{include:{evidence:{take:1,orderBy:{capturedAt:'desc'}}},orderBy:[{severity:'asc'},{createdAt:'asc'}]}}});if(!scan)return new NextResponse('Not found',{status:404});if(scan.status!=='COMPLETED')return new NextResponse('Report is available after the scan completes.',{status:409});const report=await ensureReport(scan);const pdf=await pdfBuffer(scan,report);const safe=scan.asset.normalizedHost.replace(/[^a-z0-9.-]+/gi,'-');return new NextResponse(new Uint8Array(pdf),{headers:{'content-type':'application/pdf','content-disposition':`attachment; filename="xdigitex-security-${safe}-${scan.id.slice(0,8)}.pdf"`,'cache-control':'private, no-store'}});}
