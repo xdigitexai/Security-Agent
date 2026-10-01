@@ -1,6 +1,6 @@
-# DeepSeek Security Agent
+# DeepSeek Flash Security Agent
 
-Xdigitex supports a prompt-first assessment workflow while keeping scanner execution inside the existing authorization and safety boundaries.
+Xdigitex uses DeepSeek Flash as the planning and reporting brain for a prompt-first authorized security assessment while scanner execution remains inside Xdigitex-owned scope, SSRF, request-limit and registered-check controls.
 
 ## Configuration
 
@@ -10,97 +10,60 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-flash
 ```
 
-The integration calls the OpenAI-compatible DeepSeek `POST /chat/completions` endpoint and requests JSON output.
+The integration calls `POST /chat/completions` with `model: deepseek-flash` and JSON output. The model name is fixed in the runtime integration so assessment planning and report generation use DeepSeek Flash even if a stale model name remains in an older environment file.
 
 ## One-prompt workflow
 
-Ownership verification remains a one-time prerequisite for each target. After a target is verified, the assessment itself is controlled by one natural-language instruction.
+Ownership verification remains a one-time prerequisite for each target. After a target is verified, one natural-language instruction starts the operation.
 
 1. Add the site under **Assets** and complete ownership verification.
 2. Open **AI Security Agent**.
-3. Enter one prompt describing the outcome you want.
+3. Enter one instruction describing the assessment outcome you want.
+4. Xdigitex resolves the verified target and immutable scope.
+5. The worker maps the first-party application.
+6. DeepSeek Flash converts the instruction and application map into a structured mission.
+7. Registered safe checks execute through the bounded HTTP/browser layer.
+8. Findings and sanitized evidence are persisted.
+9. Before the scan is marked complete, DeepSeek Flash receives the stored finding summaries and coverage metadata and produces the final structured report.
+10. The scan becomes **Report Ready** only after that report has been saved.
 
-Examples:
+## Final report
 
-```text
-Perform a complete security assessment. Map the application, prioritize the highest-risk first-party surfaces, safely verify weaknesses, and prepare a remediation-focused report.
-```
+Every newly completed operation stores a full report in `Scan.agentReport`. The report contains:
 
-```text
-Assess app.example.com with emphasis on authentication, authorization, APIs and sensitive data exposure. Put confirmed high-risk issues first and give developers clear fixes.
-```
+- executive summary
+- security-posture interpretation
+- severity and confidence overview
+- assessment coverage
+- attack-surface summary
+- highest-priority findings
+- ordered P0/P1/P2/P3 remediation actions
+- concrete validation/retest steps
+- technical assessment summary
+- positive observations where supported
+- limitations and testing boundaries
+- recommended next actions
 
-```text
-Perform a comprehensive end-to-end assessment of app.example.com and produce a management-friendly summary plus developer remediation priorities.
-```
+The completed scan page exposes the executive view immediately. `/scans/:id/report` shows the complete on-screen report and `GET /api/scans/:id/report` exports the same assessment as PDF.
 
-### Target resolution
+Older completed scans that only contain the legacy short report are upgraded on first opening of the new full-report page or PDF endpoint.
 
-- If the organization has exactly one verified, enabled asset, the prompt does not need to contain a URL or domain.
-- If there are multiple verified assets, naming one verified hostname in the prompt is enough; a full `https://...` URL is optional.
-- If the prompt contains an explicit URL, that hostname and protocol must match an ownership-verified enabled asset.
-- A prompt cannot expand assessment scope to an unrelated or unverified host.
+## Evidence rule
 
-## What the single prompt controls
+DeepSeek Flash is never treated as the vulnerability source of truth. The reporting prompt explicitly restricts the model to the stored scanner findings and coverage supplied by Xdigitex. It must not invent vulnerabilities, endpoints, credentials, exploitation success, users, or impact.
 
-The prompt is translated into a structured assessment mission containing:
+If the DeepSeek API is unavailable or `DEEPSEEK_API_KEY` is not configured, Xdigitex stores a deterministic fallback report so the scan can still finish with a complete report structure.
 
-- mission summary
-- focused, balanced, or comprehensive execution style
-- registered security modules to prioritize
-- first-party focus areas
-- execution priorities
-- report emphasis
+## Execution boundary
 
-A request containing terms such as `full`, `complete`, `comprehensive`, `all checks`, or `end-to-end` is forced to the complete registered safe-check set so the model cannot accidentally narrow a requested comprehensive assessment.
-
-## Execution flow
-
-1. Xdigitex resolves the prompt to an ownership-verified target.
-2. The scan worker validates immutable target scope and configured limits.
-3. Xdigitex maps the first-party application.
-4. DeepSeek receives the user request, application map, and registered scanner catalog.
-5. DeepSeek returns a structured assessment mission using only known scanner IDs.
-6. Xdigitex validates every selected ID against its own registry. Unknown IDs are discarded.
-7. Registered scanner modules execute through the centralized bounded HTTP/browser layer.
-8. The live assessment page shows the original prompt, AI mission, focus areas, priorities, approved modules, findings, and activity log.
-9. The completed PDF report receives the original prompt, structured plan, and stored findings so its summary and remediation ordering reflect the user's requested outcome without inventing evidence.
-
-## Important architecture rule
-
-DeepSeek is the reasoning and reporting layer, not an unrestricted execution engine.
-
-It cannot directly:
+DeepSeek Flash cannot directly:
 
 - run shell commands
 - choose unrelated target hosts
 - bypass ownership verification
-- bypass scope/SSRF protection
+- bypass scope or SSRF protection
 - disable request limits
 - perform destructive exploitation
 - retrieve raw test-account credentials from the database
 
-A model-selected check runs only when that check already exists in the Xdigitex scanner registry.
-
-## Proof of impact
-
-The scanner may safely verify a weakness using the minimum non-destructive proof required by the registered module. Evidence is sanitized before storage. If establishing impact would require destructive behavior, unrelated-user access, real financial actions, or destabilizing traffic, the scanner stops at the safe exploitation boundary and reports the evidence available.
-
-## PDF report
-
-`GET /api/scans/:id/report` builds a PDF containing:
-
-- target and scan metadata
-- prompt-aware DeepSeek-assisted executive summary
-- security posture
-- finding counts
-- highest-risk confirmed issues
-- full recorded technical findings
-- affected URLs/methods
-- sanitized evidence excerpts
-- impact
-- remediation
-- prioritized fixes
-- assessment boundaries and limitations
-
-DeepSeek receives only the stored finding summaries plus the assessment prompt/plan for report writing and is instructed not to invent vulnerabilities or exploitation results. If DeepSeek is unavailable, Xdigitex still generates a deterministic PDF report from the scan findings.
+A model-selected check executes only when that check already exists in the Xdigitex scanner registry.
