@@ -201,9 +201,7 @@ model TestIdentity {
   roleLabel String
   tenantLabel String?
   authType TestIdentityAuthType
-  encryptedSecret String
-  secretIv String
-  secretTag String
+  credentialRef String
   expectedSessionState TestSessionState @default(ACTIVE)
   enabled Boolean @default(true)
   expiresAt DateTime?
