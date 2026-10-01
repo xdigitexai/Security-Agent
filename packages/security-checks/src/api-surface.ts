@@ -27,8 +27,26 @@ export const apiSurfaceCheck: SecurityCheck = {
       ...ctx.endpoints.filter((e) => e.method === 'GET' && API_PATH.test(e.url)).map((e) => e.url),
     ];
 
-    const urls = sameHostUrls(ctx.assetUrl, candidates, MAX_ENDPOINTS);
+    const seenPaths = new Set<string>();
+    const urls = sameHostUrls(ctx.assetUrl, candidates, MAX_ENDPOINTS).filter((url) => {
+      // /api/?MA and /api/?SA are one surface reached with different query
+      // strings; probing each produced a duplicate finding per variant.
+      const pathname = new URL(url).pathname;
+      if (seenPaths.has(pathname)) return false;
+      seenPaths.add(pathname);
+      return true;
+    });
     if (!urls.length) return [];
+
+    // Baseline a path that cannot exist, so a catch-all route answering 200 for
+    // everything is not reported as an API surface.
+    const miss = await safeRequest(
+      ctx.http,
+      new URL(`/xdigitex-api-miss-${Date.now().toString(36)}`, ctx.assetUrl).toString(),
+      {},
+      8000,
+    );
+    const baselineBody = miss?.body.trim() ?? '';
 
     const out = [];
 
@@ -38,6 +56,7 @@ export const apiSurfaceCheck: SecurityCheck = {
 
       const body = response.body.trim();
       const contentType = String(response.headers['content-type'] ?? '');
+      if (baselineBody && body === baselineBody) continue;
       const evidence = [{ ...response.evidence, responseExcerpt: `HTTP ${response.status}, ${body.length} bytes` }];
 
       if (response.status >= 500) {
@@ -124,7 +143,9 @@ export const apiSurfaceCheck: SecurityCheck = {
         }
       }
 
-      if (!jsonLike && body.length > 0) {
+      // A text/html answer is a page, not an API surface; coverage.endpoints
+      // reviews those, and reporting them here duplicated its findings.
+      if (!jsonLike && body.length > 0 && !contentType.includes('text/html')) {
         out.push(
           finding({
             checkId: this.id,
