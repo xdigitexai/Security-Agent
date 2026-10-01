@@ -79,7 +79,7 @@ export async function POST(req:Request){
     assetId:asset.id,
     target:assetOrigin.origin,
     targetResolution:explicitUrl?'explicit-url':assets.length===1?'single-verified-asset':'prompt-host',
-    deepseekModel:c.DEEPSEEK_MODEL
+    deepseekModel:'deepseek-flash'
   });
   return NextResponse.redirect(new URL(`/scans/${scan.id}`,req.url),303);
 }
