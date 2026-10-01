@@ -72,7 +72,7 @@ const worker=new Worker('security-scans',async job=>{
 
    await db.scan.update({where:{id:scan.id},data:{stage:'DeepSeek Report',progress:92}});
    await log(scan.id,'DeepSeek Report','Generating complete executive and technical assessment report with DeepSeek Flash',{model:'deepseek-flash',findings:findings.length});
-   const report=await generateSecurityReport({target:scan.asset.baseUrl,scanId:scan.id,prompt:scan.agentPrompt,plan:agentPlan,findings:findings.map(f=>({title:f.title,severity:f.severity,confidence:f.confidence,category:f.category,affectedUrl:f.affectedUrl,method:f.method,description:f.description,impact:f.impact,remediation:f.remediation,status:'OPEN'})),endpointCount:cr.endpoints.length,pageCount:cr.pages.length,requestCount:http.count,technologies:applicationMap.technologies,selectedChecks:selectedChecks.map(c=>c.id),checkResults,scope});
+   const report=await generateSecurityReport({target:scan.asset.baseUrl,scanId:scan.id,prompt:scan.agentPrompt,plan:agentPlan,findings:findings.map(f=>({title:f.title,severity:f.severity,confidence:f.confidence,category:f.category,affectedUrl:f.affectedUrl,method:f.method,description:f.description,impact:f.impact,remediation:f.remediation,status:'OPEN'})),endpointCount:cr.endpoints.length,pageCount:cr.pages.length,requestCount:http.count,technologies:applicationMap.technologies,selectedChecks:selectedChecks.map(c=>c.id),checkResults,identityCount:testIdentities.length,authorizationResourceCount:testResources.length,scope});
 
    const completedAt=new Date();
    await db.scan.update({where:{id:scan.id},data:{status:ScanStatus.COMPLETED,stage:'Report Ready',progress:100,agentReport:report as any,completedAt}});
