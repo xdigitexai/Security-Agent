@@ -9,6 +9,9 @@ enum JobStatus { QUEUED RUNNING COMPLETED FAILED CANCELED }
 enum FindingStatus { OPEN FIXED IGNORED FALSE_POSITIVE RETESTING }
 enum Severity { CRITICAL HIGH MEDIUM LOW INFORMATIONAL }
 enum Confidence { CONFIRMED HIGH MEDIUM LOW NEEDS_REVIEW }
+enum TestIdentityAuthType { BEARER COOKIE HEADERS }
+enum TestSessionState { ACTIVE REVOKED }
+enum TestResourceExpectation { DENY_COMPARATORS PUBLIC }
 
 model User {
   id String @id @default(uuid()) @db.Uuid
@@ -54,6 +57,8 @@ model Asset {
   verifications AssetVerification[]
   scans Scan[]
   findings Finding[]
+  testIdentities TestIdentity[]
+  testResources TestResource[]
   @@unique([organizationId,normalizedHost])
 }
 model AssetVerification {
@@ -188,4 +193,40 @@ model AuditLog {
   organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
   actor User? @relation(fields:[actorUserId], references:[id], onDelete:SetNull)
   @@index([organizationId,createdAt])
+}
+model TestIdentity {
+  id String @id @default(uuid()) @db.Uuid
+  assetId String @db.Uuid
+  label String
+  roleLabel String
+  tenantLabel String?
+  authType TestIdentityAuthType
+  encryptedSecret String
+  secretIv String
+  secretTag String
+  expectedSessionState TestSessionState @default(ACTIVE)
+  enabled Boolean @default(true)
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  asset Asset @relation(fields:[assetId], references:[id], onDelete:Cascade)
+  resourcesOwned TestResource[] @relation("TestResourceOwner")
+  @@index([assetId,enabled])
+}
+model TestResource {
+  id String @id @default(uuid()) @db.Uuid
+  assetId String @db.Uuid
+  label String
+  url String
+  method String @default("GET")
+  ownerIdentityId String @db.Uuid
+  comparatorIdentityIds Json
+  expectation TestResourceExpectation @default(DENY_COMPARATORS)
+  proofMarker String?
+  safeReadOnly Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  asset Asset @relation(fields:[assetId], references:[id], onDelete:Cascade)
+  ownerIdentity TestIdentity @relation("TestResourceOwner", fields:[ownerIdentityId], references:[id], onDelete:Cascade)
+  @@index([assetId])
 }
