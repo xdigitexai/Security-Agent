@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { db, ScanStatus, JobStatus, FindingStatus } from '@xdigitex/database';
-import { env, findingFingerprint } from '@xdigitex/shared';
+import { env, findingFingerprint, generateSecurityReport } from '@xdigitex/shared';
 import { ScanHttpClient, crawl, runChecks, buildApplicationMap, type ScanContext } from '@xdigitex/scanner-core';
 import { checks } from '@xdigitex/security-checks';
 import type { ScanScope, SecurityFinding, AuthorizedTestIdentity, AuthorizedTestResource } from '@xdigitex/types';
@@ -52,14 +52,16 @@ const worker=new Worker('security-scans',async job=>{
    const applicationMap=buildApplicationMap({pages:cr.pages,endpoints:cr.endpoints,scripts:cr.scripts,externalDependencies:cr.externalDependencies,rootHeaders:recon.headers,rootBody:recon.body});
    await log(scan.id,'Endpoint Discovery','Application map built',{surfaces:applicationMap.surfaces.length,auth:applicationMap.authUrls.length,api:applicationMap.apiUrls.length,admin:applicationMap.adminUrls.length,uploads:applicationMap.uploadUrls.length,payments:applicationMap.paymentUrls.length,graphql:applicationMap.graphqlUrls.length,apiDocs:applicationMap.apiDocsUrls.length,websockets:applicationMap.websocketUrls.length,technologies:applicationMap.technologies,externalDependencies:applicationMap.externalDependencies});
    let selectedChecks=retestFinding?retestChecks:checks;
+   let agentPlan:any=scan.agentPlan||null;
    if(!retestFinding){
      await db.scan.update({where:{id:scan.id},data:{stage:'AI Planning',progress:30}});
      const plan=await buildAgentPlan(scan.agentPrompt||undefined,applicationMap,checks);
      if(plan){
+       agentPlan=plan;
        const wanted=new Set(plan.focusCheckIds);selectedChecks=checks.filter(c=>wanted.has(c.id));
        await db.scan.update({where:{id:scan.id},data:{agentPlan:plan as any}});
-       await log(scan.id,'AI Planning','DeepSeek prioritized registered scanner modules',{model:cfg.DEEPSEEK_MODEL,checks:selectedChecks.map(c=>c.id),rationale:plan.rationale,priorities:plan.priorities});
-     }else await log(scan.id,'AI Planning','DeepSeek unavailable; using complete registered safe check set',{checks:checks.map(c=>c.id)});
+       await log(scan.id,'AI Planning','DeepSeek Flash prioritized registered scanner modules',{model:'deepseek-flash',checks:selectedChecks.map(c=>c.id),rationale:plan.rationale,priorities:plan.priorities});
+     }else await log(scan.id,'AI Planning','DeepSeek Flash unavailable; using complete registered safe check set',{checks:checks.map(c=>c.id)});
    }
    const ctx:ScanContext={assetUrl:scan.asset.baseUrl,scope,http,pages:cr.pages,endpoints:cr.endpoints,scripts:cr.scripts,applicationMap,testIdentities,testResources,resolvedIdentityHeaders,isCanceled};
    const stages=['Header Analysis','API Analysis','Authentication Analysis','Client-Side Analysis','Safe Vulnerability Checks'];
@@ -68,8 +70,27 @@ const worker=new Worker('security-scans',async job=>{
    const current=new Set(saved.map(x=>x.fingerprint));
    if(retestFinding){const reproduced=current.has(retestFinding.fingerprint);if(reproduced){await db.finding.update({where:{id:retestFinding.id},data:{status:FindingStatus.OPEN,lastSeenAt:new Date()}});await db.findingEvent.create({data:{findingId:retestFinding.id,type:'RETEST_STILL_VULNERABLE',message:`Focused retest ${scan.id} reproduced the original finding.`}});}else{await db.finding.update({where:{id:retestFinding.id},data:{status:FindingStatus.FIXED}});await db.findingEvent.create({data:{findingId:retestFinding.id,type:findings.length?'RETEST_CHANGED_BEHAVIOR':'RETEST_FIXED',message:findings.length?`Original fingerprint was not reproduced by focused retest ${scan.id}; related changed behavior was recorded separately.`:`Focused retest ${scan.id} did not reproduce the original behavior.`}});}}
    else{const prior=await db.finding.findMany({where:{assetId:scan.assetId,status:FindingStatus.OPEN,NOT:{scanId:scan.id}}});for(const f of prior)if(!current.has(f.fingerprint)){await db.finding.update({where:{id:f.id},data:{status:FindingStatus.FIXED}});await db.findingEvent.create({data:{findingId:f.id,type:'NOT_REPRODUCED',message:`Not reproduced by scan ${scan.id}; historical evidence retained.`}});}}
-   await db.scan.update({where:{id:scan.id},data:{status:ScanStatus.COMPLETED,stage:'Report Generation',progress:100,completedAt:new Date()}});await db.scanJob.updateMany({where:{scanId:scan.id},data:{status:JobStatus.COMPLETED,completedAt:new Date()}});
-   await log(scan.id,'Report Generation',retestFinding?`Focused retest completed with ${findings.length} matching/related observations`:`Completed with ${findings.length} findings`,{requests:http.count,pages:cr.pages.length,surfaces:applicationMap.surfaces.length,retestFindingId,authorizedIdentityPlans:testResources.length,resolvedIdentityProfiles:Object.keys(resolvedIdentityHeaders).length,selectedChecks:selectedChecks.map(c=>c.id)});return {findings:findings.length,retestFindingId};
+
+   await db.scan.update({where:{id:scan.id},data:{stage:'DeepSeek Report',progress:92}});
+   await log(scan.id,'DeepSeek Report','Generating complete executive and technical assessment report with DeepSeek Flash',{model:'deepseek-flash',findings:findings.length});
+   const report=await generateSecurityReport({
+     target:scan.asset.baseUrl,
+     scanId:scan.id,
+     prompt:scan.agentPrompt,
+     plan:agentPlan,
+     findings:findings.map(f=>({title:f.title,severity:f.severity,confidence:f.confidence,category:f.category,affectedUrl:f.affectedUrl,method:f.method,description:f.description,impact:f.impact,remediation:f.remediation,status:'OPEN'})),
+     endpointCount:cr.endpoints.length,
+     pageCount:cr.pages.length,
+     requestCount:http.count,
+     technologies:applicationMap.technologies,
+     selectedChecks:selectedChecks.map(c=>c.id),
+     scope
+   });
+
+   const completedAt=new Date();
+   await db.scan.update({where:{id:scan.id},data:{status:ScanStatus.COMPLETED,stage:'Report Ready',progress:100,agentReport:report as any,completedAt}});
+   await db.scanJob.updateMany({where:{scanId:scan.id},data:{status:JobStatus.COMPLETED,completedAt}});
+   await log(scan.id,'Report Ready',retestFinding?`Focused retest completed with ${findings.length} matching/related observations`:`Completed with ${findings.length} findings and a full ${report.generatedBy==='deepseek-flash'?'DeepSeek Flash':'fallback'} report`,{requests:http.count,pages:cr.pages.length,surfaces:applicationMap.surfaces.length,retestFindingId,authorizedIdentityPlans:testResources.length,resolvedIdentityProfiles:Object.keys(resolvedIdentityHeaders).length,selectedChecks:selectedChecks.map(c=>c.id),reportProvider:report.generatedBy});return {findings:findings.length,retestFindingId,reportProvider:report.generatedBy};
  }catch(e){const cancel=String(e).includes('SCAN_CANCELED')||await canceled(scan.id)||Date.now()>deadline;await db.scan.update({where:{id:scan.id},data:{status:cancel?ScanStatus.CANCELED:ScanStatus.FAILED,stage:cancel?'Canceled':'Failed',completedAt:new Date()}});await db.scanJob.updateMany({where:{scanId:scan.id},data:{status:cancel?JobStatus.CANCELED:JobStatus.FAILED,errorMessage:cancel?undefined:String(e),completedAt:new Date()}});if(retestFinding)await db.findingEvent.create({data:{findingId:retestFinding.id,type:'RETEST_FAILED',message:`Focused retest failed safely: ${String(e).slice(0,300)}`}});throw e;}
  finally{await http.close();}
 },{connection:redis,concurrency:cfg.WORKER_CONCURRENCY});
