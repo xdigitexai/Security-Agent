@@ -3,9 +3,9 @@ import type { ApplicationMap, ApplicationSurface, ApplicationSurfaceKind, Discov
 function classify(raw:string, method:string):ApplicationSurfaceKind {
   let p=''; try{p=new URL(raw).pathname.toLowerCase();}catch{return 'OTHER';}
   if(method==='WEBSOCKET'||raw.startsWith('ws:')||raw.startsWith('wss:')) return 'WEBSOCKET';
-  if(/\/(?:swagger|openapi|api-docs)(?:\/|$)|\/docs\/(?:api|openapi)/.test(p)) return 'API_DOCS';
+  if(/\/(?:swagger|openapi|api-docs)(?:\/|$)|\/docs\/(?:api|openapi)/.test(p)||/\/(?:swagger\.json|openapi\.json)$/.test(p)) return 'API_DOCS';
   if(/\/(?:graphql|graphiql)(?:\/|$)/.test(p)) return 'GRAPHQL';
-  if(/\/(?:login|signin|sign-in|signup|register|logout|password|forgot|reset|verify|verification|otp|mfa|oauth|auth)(?:\/|$)/.test(p)) return 'AUTH';
+  if(/\/(?:login|signin|sign-in|signup|register|logout|password|forgot|reset|verify|verification|otp|mfa|oauth|auth)(?:\/|$)/.test(p)||p==='/.well-known/openid-configuration') return 'AUTH';
   if(/\/(?:admin|administrator|staff|backoffice|back-office|moderator)(?:\/|$)/.test(p)) return 'ADMIN';
   if(/\/(?:upload|uploads|attachment|attachments|media|files)(?:\/|$)/.test(p)) return 'UPLOAD';
   if(/\/(?:checkout|payment|payments|billing|invoice|subscription|subscriptions|coupon|coupons|wallet|balance|transaction|transactions)(?:\/|$)/.test(p)) return 'PAYMENT';
@@ -19,7 +19,7 @@ export function buildApplicationMap(input:{pages:string[];endpoints:DiscoveredEn
   const surfaces=new Map<string,ApplicationSurface>();
   const add=(url:string,method:string,source:ApplicationSurface['source'],parameters?:string[])=>{const kind=classify(url,method);if(kind==='OTHER'&&source==='script')return;const key=`${method} ${url}`;surfaces.set(key,{kind,url,method,source,parameters});};
   for(const p of input.pages)add(p,'GET','page');
-  for(const e of input.endpoints)add(e.url,e.method,'network',e.parameters);
+  for(const e of input.endpoints){if(e.responseCode===404||e.responseCode===410)continue;add(e.url,e.method,'network',e.parameters);}
   for(const s of input.scripts)add(s,'GET','script');
   const technologies=new Map<string,string>(); const h=input.rootHeaders||{}; const body=input.rootBody||'';
   if(h.server)tech(h.server.split('/')[0]||'Server',`server: ${h.server}`,technologies);
