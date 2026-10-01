@@ -51,19 +51,22 @@ export async function verifyOwnership(baseUrl:string,method:VerificationMethod,t
         '/.well-known/xdigitex-security-verification.html',
         '/.well-known/xdigitex-security-verification.txt'
       ];
-      let lastReason='HTML verification file not found yet.';
-      for(const path of paths){
+      const checks=await Promise.all(paths.map(async path=>{
         const url=new URL(path,u).toString();
         try{
           const r=await http.request(url,{},6000);
-          if(r.status!==200){lastReason=`${path} returned HTTP ${r.status}.`;continue;}
+          if(r.status!==200)return {ok:false,path,url,reason:`${path} returned HTTP ${r.status}.`};
           const body=r.body.trim();
           const ok=body===token||body.includes(marker(token))||metaMatches(body,token);
-          if(ok)return {ok:true,reason:'HTML verification file found.',checked:url};
-          lastReason=`${path} is reachable but does not contain the current verification token.`;
-        }catch(error){lastReason=readableError(error);}
-      }
-      return {ok:false,reason:`${lastReason} Upload the generated HTML file to your site root as /xdigitex-security-verification.html and retry.`,checked:new URL('/xdigitex-security-verification.html',u).toString()};
+          return ok
+            ? {ok:true,path,url,reason:'HTML verification file found.'}
+            : {ok:false,path,url,reason:`${path} is reachable but does not contain the current verification token.`};
+        }catch(error){return {ok:false,path,url,reason:readableError(error)};}
+      }));
+      const match=checks.find(check=>check.ok);
+      if(match)return {ok:true,reason:match.reason,checked:match.url};
+      const primary=checks[0];
+      return {ok:false,reason:`${primary?.reason||'HTML verification file not found yet.'} Upload the generated HTML file to your site root as /xdigitex-security-verification.html and retry.`,checked:new URL('/xdigitex-security-verification.html',u).toString()};
     }
 
     try{
