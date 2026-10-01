@@ -8,6 +8,7 @@ import { reflectionCheck } from './reflection';
 import { redirectCheck } from './redirect';
 import { apiDocsCheck } from './api-docs';
 import { apiReconCheck } from './api-recon';
+import { inputErrorCheck } from './input-errors';
 import { errorDisclosureCheck } from './error-disclosure';
 import { sensitiveCacheCheck } from './cache-sensitive';
 import { controlledAuthorizationCheck, revokedSessionCheck } from './authorization';
@@ -21,6 +22,7 @@ export const checks=[
   apiDocsCheck,
   apiReconCheck,
   errorDisclosureCheck,
+  inputErrorCheck,
   sensitiveCacheCheck,
   controlledAuthorizationCheck,
   revokedSessionCheck,
