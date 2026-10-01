@@ -51,11 +51,13 @@ export async function buildAgentPlan(prompt:string|undefined,map:ApplicationMap,
 
   const allowed=new Set(catalog.map(c=>c.id));
   const selected=[...new Set(plan.focusCheckIds.filter((id):id is string=>typeof id==='string'&&allowed.has(id)))];
-  const executionStyle:AgentPlan['executionStyle']=
-    plan.executionStyle==='focused'||plan.executionStyle==='comprehensive'||plan.executionStyle==='balanced'
+  const comprehensiveRequested=wantsComprehensive(request);
+  const executionStyle:AgentPlan['executionStyle']=comprehensiveRequested
+    ? 'comprehensive'
+    : plan.executionStyle==='focused'||plan.executionStyle==='comprehensive'||plan.executionStyle==='balanced'
       ? plan.executionStyle
-      : wantsComprehensive(request)?'comprehensive':'balanced';
-  const focusCheckIds=(executionStyle==='comprehensive'||wantsComprehensive(request))
+      : 'balanced';
+  const focusCheckIds=executionStyle==='comprehensive'
     ? catalog.map(c=>c.id)
     : selected.length?selected:catalog.map(c=>c.id);
 
