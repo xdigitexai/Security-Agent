@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireOrg } from '../../../../../../lib/auth';
 import { db } from '@xdigitex/database';
-import { verifyOwnership } from '../../../../../../lib/verification';
+import { verifyOwnership, type OwnershipVerificationResult } from '../../../../../../lib/verification';
 import { audit } from '../../../../../../lib/audit';
 
 export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
@@ -18,7 +18,7 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
     return NextResponse.redirect(new URL(`/assets/${a.id}?verification=expired`,req.url),303);
   }
 
-  let result;
+  let result:OwnershipVerificationResult;
   try{
     result=await verifyOwnership(a.baseUrl,v.method,v.token);
   }catch(error){
