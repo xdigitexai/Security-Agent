@@ -5,6 +5,7 @@ const schema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   SESSION_SECRET: z.string().min(32).default('development-only-change-me-32-bytes!!'),
   APP_URL: z.string().url().default('http://localhost:3000'),
+  IDENTITY_PROFILE_BROKER_URL: z.string().url().optional(),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(2),
   MAX_SCAN_DURATION_MS: z.coerce.number().int().max(30*60*1000).default(30*60*1000),
   MAX_PAGES: z.coerce.number().int().max(500).default(500),
